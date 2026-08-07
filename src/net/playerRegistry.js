@@ -37,12 +37,13 @@ export async function initPlayerRegistry() {
   if (!FIREBASE_ENABLED) return;
   try {
     const { getFirebaseApp, ensureAnonymousAuth } = await import('./firebaseApp.js');
-    const { getDatabase, ref, set, get, child } = await import('firebase/database');
+    const { getDatabase, ref, set, get, child, push, remove, update, onValue, off, runTransaction } =
+      await import('firebase/database');
 
     const app = await getFirebaseApp();
     myUid = await ensureAnonymousAuth();
     const db = getDatabase(app);
-    dbApi = { db, ref, set, get, child };
+    dbApi = { db, ref, set, get, child, push, remove, update, onValue, off, runTransaction };
     online = true;
 
     await publishMyProfile();
