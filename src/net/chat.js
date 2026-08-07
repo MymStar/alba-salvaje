@@ -20,7 +20,7 @@ const NAME_KEY = 'alba_salvaje_nick_v1';
 
 let mode = 'offline'; // 'offline' | 'firebase'
 let channel = null;
-let firestoreRefs = null; // { db, collection, addDoc, onSnapshot, query, orderBy, limit, serverTimestamp }
+let dbRefs = null; // { push, chatRef, serverTimestamp } (Realtime Database)
 
 export function getNickname() {
   let nick = localStorage.getItem(NAME_KEY);
@@ -88,35 +88,37 @@ function initOfflineMode() {
 }
 
 async function initFirebaseMode() {
-  const { initializeApp } = await import('firebase/app');
-  const {
-    getFirestore,
-    collection,
-    addDoc,
-    onSnapshot,
-    query,
-    orderBy,
-    limit,
-    serverTimestamp
-  } = await import('firebase/firestore');
+  const { getFirebaseApp, ensureAnonymousAuth } = await import('./firebaseApp.js');
+  const { getDatabase, ref, push, onValue, query, limitToLast, serverTimestamp } =
+    await import('firebase/database');
 
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
-  const colRef = collection(db, 'chat_global');
-  const q = query(colRef, orderBy('ts', 'asc'), limit(MAX_MESSAGES));
+  const app = await getFirebaseApp();
+  await ensureAnonymousAuth();
+  const db = getDatabase(app);
+  const chatRef = ref(db, 'chat_global');
+  const q = query(chatRef, limitToLast(MAX_MESSAGES));
 
-  firestoreRefs = { db, colRef, addDoc, serverTimestamp };
+  dbRefs = { push, chatRef, serverTimestamp };
 
+  // Realtime Database no tiene "solo lo nuevo desde la última vez" como
+  // Firestore onSnapshot: onValue siempre entrega la lista completa (ya
+  // recortada a los últimos MAX_MESSAGES por la query). Para no repetir
+  // toda la lista cada vez como si fueran mensajes nuevos, se recuerda la
+  // marca de tiempo del último mensaje visto y solo se emiten los más nuevos.
+  let lastTs = 0;
   let first = true;
-  onSnapshot(q, (snap) => {
-    const msgs = snap.docs.map((d) => d.data());
+  onValue(q, (snap) => {
+    const val = snap.val() || {};
+    const msgs = Object.values(val).sort((a, b) => (a.ts || 0) - (b.ts || 0));
     if (first) {
       EventBus.emit('chat-history', msgs);
+      lastTs = msgs.length ? msgs[msgs.length - 1].ts : 0;
       first = false;
-    } else {
-      const last = msgs[msgs.length - 1];
-      if (last) EventBus.emit('chat-message', last);
+      return;
     }
+    const nuevos = msgs.filter((m) => (m.ts || 0) > lastTs);
+    nuevos.forEach((m) => EventBus.emit('chat-message', m));
+    if (msgs.length) lastTs = msgs[msgs.length - 1].ts;
   });
 }
 
@@ -130,9 +132,9 @@ export async function sendChatMessage(text) {
     ts: Date.now()
   };
 
-  if (mode === 'firebase' && firestoreRefs) {
-    const { colRef, addDoc, serverTimestamp } = firestoreRefs;
-    await addDoc(colRef, { ...msg, ts: serverTimestamp() || msg.ts });
+  if (mode === 'firebase' && dbRefs) {
+    const { push, chatRef, serverTimestamp } = dbRefs;
+    await push(chatRef, { ...msg, ts: serverTimestamp() });
     return;
   }
 

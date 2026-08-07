@@ -1,0 +1,84 @@
+{
+  "rules": {
+    "chat_global": {
+      ".read": true,
+      ".indexOn": "ts",
+      "$messageId": {
+        ".write": "auth != null && !data.exists()",
+        ".validate": "newData.hasChildren(['name', 'text', 'ts']) && newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 20 && newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 200"
+      }
+    },
+
+    "players": {
+      ".read": true,
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid",
+        ".validate": "newData.hasChildren(['nickname', 'level', 'characterId'])"
+      }
+    },
+
+    "players_by_nickname": {
+      ".read": true,
+      "$nick": {
+        "$uid": {
+          ".write": "auth != null && auth.uid === $uid"
+        }
+      }
+    },
+
+    "marriage_proposals": {
+      "$targetUid": {
+        ".read": "auth != null && auth.uid === $targetUid",
+        "$fromUid": {
+          ".read": "auth != null && auth.uid === $fromUid",
+          ".write": "auth != null && (auth.uid === $fromUid || auth.uid === $targetUid)"
+        }
+      }
+    },
+
+    "marriages": {
+      ".read": true,
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+
+    "descendants": {
+      ".read": true,
+      "$id": {
+        ".write": "auth != null"
+      }
+    },
+
+    "clans": {
+      ".read": true,
+      "$clanId": {
+        ".write": "auth != null"
+      }
+    },
+
+    "clan_chat": {
+      "$clanId": {
+        ".read": true,
+        "$messageId": {
+          ".write": "auth != null && !data.exists()",
+          ".validate": "newData.hasChildren(['name', 'text', 'ts'])"
+        }
+      }
+    },
+
+    "marketplace_listings": {
+      ".read": true,
+      "$id": {
+        ".write": "auth != null"
+      }
+    },
+
+    "pending_payouts": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null"
+      }
+    }
+  }
+}
