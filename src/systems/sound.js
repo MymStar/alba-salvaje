@@ -113,7 +113,15 @@ const SOUNDS = {
   notify: () => tone({ freq: 700, duration: 0.06, type: 'sine', gain: 0.07 }),
   chatMessage: () => tone({ freq: 950, duration: 0.05, type: 'sine', gain: 0.05 }),
   dayStart: () => tone({ freq: 440, duration: 0.5, type: 'sine', gain: 0.05, sweep: 200 }),
-  nightStart: () => tone({ freq: 300, duration: 0.6, type: 'sine', gain: 0.06, sweep: -140 })
+  nightStart: () => tone({ freq: 300, duration: 0.6, type: 'sine', gain: 0.06, sweep: -140 }),
+
+  // ---- Fase 2 ----
+  spell: () => {
+    tone({ freq: 660, duration: 0.1, type: 'sine', gain: 0.1, sweep: 260 });
+    tone({ freq: 990, duration: 0.12, type: 'sine', gain: 0.08, delay: 0.06 });
+  },
+  bossRoar: () => tone({ freq: 90, duration: 0.9, type: 'sawtooth', gain: 0.16, sweep: -30 }),
+  thunder: () => noiseBurst({ duration: 0.5, gain: 0.18 })
 };
 
 /** Reproduce un efecto por nombre (ver SOUNDS arriba). No-op si no existe o está muteado. */

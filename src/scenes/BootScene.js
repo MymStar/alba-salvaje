@@ -47,6 +47,29 @@ export default class BootScene extends Phaser.Scene {
     this.#drawIcon(g, TEX.ICON_GOLD, PALETTE.uiAccent);
     this.#drawIcon(g, TEX.ICON_GEM, 0x6fd9ff);
 
+    // ---- Fase 2: iconos de equipo (mismo estilo simple que los recursos) ----
+    this.#drawIcon(g, TEX.ICON_SWORD, 0xc7c7d6);
+    this.#drawIcon(g, TEX.ICON_BOW, 0x9a6a3c);
+    this.#drawIcon(g, TEX.ICON_STAFF, 0x8a6fd9);
+    this.#drawIcon(g, TEX.ICON_ARMOR_LIGHT, 0xa87c4f);
+    this.#drawIcon(g, TEX.ICON_ARMOR_HEAVY, 0x6f7a8a);
+    this.#drawIcon(g, TEX.ICON_ROBE, 0x6f5fd9);
+    this.#drawIcon(g, TEX.ICON_RING, 0xffcc4d);
+    this.#drawIcon(g, TEX.ICON_BOOTS, 0x5a4a3a);
+    this.#drawIcon(g, TEX.ICON_AMULET, 0xd94fae);
+
+    // ---- Fase 2: altares, dioses, cristales ----
+    this.#drawAltar(g, TEX.ALTAR);
+    this.#drawGod(g, TEX.GOD_SEA, 0x3f8fd6, 0x1f4f8f);
+    this.#drawGod(g, TEX.GOD_WIND, 0xbfe0e8, 0x6f9fae);
+    this.#drawGod(g, TEX.GOD_QUAKE, 0x9a6a3c, 0x5a3a1f);
+    this.#drawGod(g, TEX.GOD_VOLCANO, 0xd9603f, 0x7a1f1f);
+    this.#drawIcon(g, TEX.CRYSTAL_NODE, 0x6fd9d0);
+
+    this.#drawFx(g, TEX.FX_FIREBALL, 0xff8a3f);
+    this.#drawFx(g, TEX.FX_HEAL, 0x8bd450);
+    this.#drawFx(g, TEX.FX_SHIELD, 0x4fc3f7);
+
     g.destroy();
 
     this.scene.start(SCENES.MENU);
@@ -143,6 +166,49 @@ export default class BootScene extends Phaser.Scene {
     g.fillRoundedRect(1, 1, s - 2, s - 2, 5);
     g.fillStyle(color, 1);
     g.fillRoundedRect(0, 0, s - 2, s - 2, 5);
+    g.generateTexture(key, s, s);
+  }
+
+  /** Altar de piedra: base ancha + pilar, con un brillo tentador en la punta. */
+  #drawAltar(g, key) {
+    const s = 40;
+    g.clear();
+    g.fillStyle(0x555f6e, 1);
+    g.fillRoundedRect(s * 0.15, s * 0.6, s * 0.7, s * 0.3, 3);
+    g.fillStyle(0x6f7a8a, 1);
+    g.fillRoundedRect(s * 0.35, s * 0.25, s * 0.3, s * 0.4, 3);
+    g.fillStyle(0xffcc4d, 0.9);
+    g.fillCircle(s / 2, s * 0.22, 5);
+    g.generateTexture(key, s, s);
+  }
+
+  /** Dios elemental: silueta grande y amenazante con "ojos" brillantes. */
+  #drawGod(g, key, body, shade) {
+    const s = 96;
+    g.clear();
+    g.fillStyle(shade, 1);
+    g.fillEllipse(s / 2, s * 0.55, s * 0.62, s * 0.7);
+    g.fillStyle(body, 1);
+    g.fillEllipse(s / 2, s * 0.5, s * 0.56, s * 0.64);
+    g.fillStyle(0xffffff, 0.95);
+    g.fillCircle(s / 2 - 14, s * 0.42, 5);
+    g.fillCircle(s / 2 + 14, s * 0.42, 5);
+    g.fillStyle(0x1a1a1a, 1);
+    g.fillCircle(s / 2 - 14, s * 0.42, 2.4);
+    g.fillCircle(s / 2 + 14, s * 0.42, 2.4);
+    g.generateTexture(key, s, s);
+  }
+
+  /** Efecto visual simple (destello circular) para hechizos. */
+  #drawFx(g, key, color) {
+    const s = 28;
+    g.clear();
+    g.fillStyle(color, 0.35);
+    g.fillCircle(s / 2, s / 2, s / 2);
+    g.fillStyle(color, 0.9);
+    g.fillCircle(s / 2, s / 2, s / 3.2);
+    g.fillStyle(0xffffff, 0.9);
+    g.fillCircle(s / 2, s / 2, s / 7);
     g.generateTexture(key, s, s);
   }
 }

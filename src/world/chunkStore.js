@@ -106,6 +106,7 @@ export function placeBuilding(scene, worldTileX, worldTileY, buildType) {
 
   playSound('build');
   EventBus.emit('notify', t('notify.built'));
+  EventBus.emit('building-placed', buildType);
   return sprite;
 }
 

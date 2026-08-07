@@ -11,6 +11,9 @@ import { openBuildMenu } from '../ui/BuildingUI.js';
 import { createChatPanel } from '../ui/ChatUI.js';
 import { t } from '../i18n.js';
 import { isMuted, toggleMuted, playSound } from '../systems/sound.js';
+import { openEquipment } from '../ui/EquipmentUI.js';
+import { openAchievements } from '../ui/AchievementsUI.js';
+import { createSpellBar } from '../ui/SpellBarUI.js';
 
 // HUDScene corre en paralelo a WorldScene (lanzada por WorldScene con
 // this.scene.launch). Solo dibuja UI encima del mundo: no toca la lógica
@@ -32,6 +35,7 @@ export default class HUDScene extends Phaser.Scene {
     this.#buildStatBars();
     this.#buildCurrencyCounters();
     createInventoryBar(this);
+    createSpellBar(this);
     this.#buildActionButtons();
     this.#buildToast();
     this.#buildLevelUpPopup();
@@ -136,7 +140,9 @@ export default class HUDScene extends Phaser.Scene {
           openBuildMenu(this);
         }
       },
-      { label: t('hud.btn.chat'), onClick: () => { playSound('notify'); this._chatApi && this._chatApi.toggle(); } }
+      { label: t('hud.btn.chat'), onClick: () => { playSound('notify'); this._chatApi && this._chatApi.toggle(); } },
+      { label: t('hud.btn.equip'), onClick: () => { playSound('notify'); openEquipment(this); } },
+      { label: t('hud.btn.achievements'), onClick: () => { playSound('notify'); openAchievements(this); } }
     ];
 
     let x = 16;

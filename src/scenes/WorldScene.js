@@ -12,6 +12,10 @@ import { startSurvivalTicker } from '../systems/hunger.js';
 import Player from '../entities/Player.js';
 import PlantEnemy from '../entities/PlantEnemy.js';
 import Zombie from '../entities/Zombie.js';
+import { castSpell, SPELLS } from '../systems/magic.js';
+import { getAltarsForChunk, spawnAltarSprite, destroyAltar } from '../world/altars.js';
+import { checkRareZoneUnlocks, getZoneAt, getTileOverrideAt, spawnCrystalNodes } from '../world/rareZones.js';
+import ZoneGuardian from '../entities/ZoneGuardian.js';
 
 const CHUNK_PX = CHUNK_SIZE * TILE_SIZE;
 
@@ -22,6 +26,8 @@ const SPAWN_MIN_DIST = 200;
 const SPAWN_MAX_DIST = 450;
 const MAX_PLANTS = 6;
 const MAX_ZOMBIES = 6;
+const MAX_GUARDIANS = 3;
+const ALTAR_INTERACT_RANGE = 50;
 
 const AUTOSAVE_MS = 2000;
 
@@ -71,6 +77,12 @@ export default class WorldScene extends Phaser.Scene {
     // clases se auto-registran en scene.plantsGroup / scene.zombiesGroup).
     this.plantsGroup = this.physics.add.group();
     this.zombiesGroup = this.physics.add.group();
+    // Fase 2: jefes (dioses) y guardianes de zona se auto-registran igual
+    // (scene.bossGroup / scene.guardiansGroup), creados perezosamente por
+    // GodBoss.spawn/ZoneGuardian.spawn — los inicializamos ya aquí para que
+    // existan desde el primer frame (evita el "??=" perezoso en dos lugares).
+    this.bossGroup = this.physics.add.group();
+    this.guardiansGroup = this.physics.add.group();
 
     // Input: flechas + WASD combinadas en un único objeto "cursors" con la
     // forma estándar de Phaser (up/down/left/right/space), para que Player
@@ -88,6 +100,16 @@ export default class WorldScene extends Phaser.Scene {
 
     keyboard.on('keydown-SPACE', () => {
       this.player?.attack?.();
+    });
+
+    // Tecla E: destruir el altar más cercano si está en rango (partes 169-201).
+    keyboard.on('keydown-E', () => this.#tryDestroyNearbyAltar());
+
+    // Teclas 1-4: lanzar los 4 hechizos (en el orden de systems/magic.js#SPELLS).
+    SPELLS.forEach((spell, i) => {
+      keyboard.on(`keydown-${['ONE', 'TWO', 'THREE', 'FOUR'][i]}`, () => {
+        if (this.player) castSpell(this, spell.id, this.player);
+      });
     });
 
     this.input.on('pointerdown', (pointer) => {
@@ -112,6 +134,17 @@ export default class WorldScene extends Phaser.Scene {
     createDayNightCycle(this);
     startSurvivalTicker(this);
 
+    // Fase 2: territorios raros. Revisa condiciones ya cumplidas de partidas
+    // guardadas, y de nuevo cada vez que algo relevante pasa (domesticar
+    // planta, derrotar un dios). spawnCrystalNodes coloca los nodos de las
+    // zonas YA desbloqueadas en este momento (ver TODO en rareZones.js).
+    checkRareZoneUnlocks();
+    spawnCrystalNodes(this);
+    const onPlantTamed = () => checkRareZoneUnlocks();
+    const onGodDefeatedZones = () => checkRareZoneUnlocks();
+    EventBus.on('plant-tamed', onPlantTamed);
+    EventBus.on('god-defeated', onGodDefeatedZones);
+
     // Temporizador de aparición de enemigos: plantas de día, zombis de noche.
     this.time.addEvent({
       delay: SPAWN_CHECK_MS,
@@ -133,6 +166,8 @@ export default class WorldScene extends Phaser.Scene {
     this.events.once('shutdown', () => {
       EventBus.off('player-died', onPlayerDied);
       EventBus.off('stats-changed', onStatsChanged);
+      EventBus.off('plant-tamed', onPlantTamed);
+      EventBus.off('god-defeated', onGodDefeatedZones);
     });
 
     // Autoguardado periódico de la última posición conocida del jugador.
@@ -162,6 +197,8 @@ export default class WorldScene extends Phaser.Scene {
 
     this.plantsGroup?.children.iterate((p) => p?.update?.(time, delta, this.player));
     this.zombiesGroup?.children.iterate((z) => z?.update?.(time, delta, this.player));
+    this.bossGroup?.children.iterate((b) => b?.update?.(time, delta, this.player));
+    this.guardiansGroup?.children.iterate((g) => g?.update?.(time, delta, this.player));
 
     // Guard: el grupo de construcciones lo crea chunkStore.js "perezosamente"
     // (solo cuando aparece la primera construcción), así que la colisión se
@@ -184,6 +221,30 @@ export default class WorldScene extends Phaser.Scene {
     } else if ((this.zombiesGroup?.getLength() ?? 0) < MAX_ZOMBIES) {
       const pos = this.#randomSpawnPosition();
       if (pos) Zombie.spawn(this, pos.x, pos.y);
+    }
+
+    // Fase 2: guardianes de territorio rara (parte 149) — solo aparecen si
+    // el jugador está parado dentro de una zona rara ya desbloqueada.
+    const playerTileX = Math.floor(this.player.x / TILE_SIZE);
+    const playerTileY = Math.floor(this.player.y / TILE_SIZE);
+    if (getZoneAt(playerTileX, playerTileY) && (this.guardiansGroup?.getLength() ?? 0) < MAX_GUARDIANS) {
+      const pos = this.#randomSpawnPosition();
+      if (pos) ZoneGuardian.spawn(this, pos.x, pos.y);
+    }
+  }
+
+  /** Busca un altar cargado en memoria a menos de ALTAR_INTERACT_RANGE px del jugador y lo destruye. */
+  #tryDestroyNearbyAltar() {
+    if (!this.player) return;
+    for (const chunk of this.loadedChunks.values()) {
+      for (const sprite of chunk.altarSprites) {
+        if (!sprite?.active) continue;
+        const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, sprite.x, sprite.y);
+        if (dist <= ALTAR_INTERACT_RANGE) {
+          destroyAltar(this, sprite);
+          return;
+        }
+      }
     }
   }
 
@@ -236,8 +297,12 @@ export default class WorldScene extends Phaser.Scene {
       for (let tx = 0; tx < CHUNK_SIZE; tx++) {
         const worldTileX = cx * CHUNK_SIZE + tx;
         const worldTileY = cy * CHUNK_SIZE + ty;
+        // Fase 2: si estas coordenadas caen dentro de una zona rara ya
+        // desbloqueada, "pintamos" la textura especial por encima del
+        // terreno normal (ver world/rareZones.js).
+        const override = getTileOverrideAt(worldTileX, worldTileY);
         const type = getTileTypeAt(worldTileX, worldTileY);
-        const texture = tileTypeToTexture(type, worldTileX, worldTileY);
+        const texture = override ?? tileTypeToTexture(type, worldTileX, worldTileY);
         const img = this.add.image(
           worldTileX * TILE_SIZE + TILE_SIZE / 2,
           worldTileY * TILE_SIZE + TILE_SIZE / 2,
@@ -250,7 +315,10 @@ export default class WorldScene extends Phaser.Scene {
 
     const buildingSprites = loadChunkBuildings(cx, cy).map((data) => spawnExistingBuilding(this, data));
 
-    this.loadedChunks.set(key, { tileImages, buildingSprites });
+    // Fase 2: altares (0 o 1 por chunk, deterministas — ver world/altars.js).
+    const altarSprites = getAltarsForChunk(cx, cy).map((data) => spawnAltarSprite(this, data));
+
+    this.loadedChunks.set(key, { tileImages, buildingSprites, altarSprites });
   }
 
   #unloadChunk(key) {
@@ -258,6 +326,7 @@ export default class WorldScene extends Phaser.Scene {
     if (!chunk) return;
     chunk.tileImages.forEach((img) => img.destroy());
     chunk.buildingSprites.forEach((sprite) => sprite?.destroy());
+    chunk.altarSprites.forEach((sprite) => sprite?.destroy());
     this.loadedChunks.delete(key);
   }
 }

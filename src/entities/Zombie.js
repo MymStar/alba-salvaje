@@ -5,6 +5,7 @@ import Phaser from 'phaser';
 import { TEX } from '../textureKeys.js';
 import { GameState, damagePlayer, addXP, addItem, addGold } from '../state.js';
 import { playSound } from '../systems/sound.js';
+import { EventBus } from '../eventBus.js';
 
 const HP_MIN = 40;
 const HP_MAX = 60;
@@ -121,6 +122,7 @@ export default class Zombie extends Phaser.Physics.Arcade.Sprite {
     if (this.body) this.body.enable = false;
 
     addXP(XP_REWARD);
+    EventBus.emit('enemy-killed', 'zombie');
     addItem('food_meat', Phaser.Math.Between(1, 2));
     if (Math.random() < GOLD_DROP_CHANCE) {
       addGold(Phaser.Math.Between(GOLD_DROP_MIN, GOLD_DROP_MAX));

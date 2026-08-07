@@ -11,6 +11,14 @@
 //   'build-mode-changed' -> (boolean) UI resalta modo construcción
 //   'shop-open' / 'shop-close'
 //   'notify'             -> (message:string) toast simple en HUD
+//   'language-changed'   -> (code:string) idioma cambiado (i18n.js recarga la página, rara vez hace falta escuchar esto)
+//
+// Fase 2 (equipo/magia/dioses/logros):
+//   'equipment-changed'    -> UI de equipo refresca qué hay puesto en cada slot
+//   'spell-unlocked'       -> (spellId:string) nuevo hechizo disponible
+//   'god-defeated'         -> (godId:string) un dios fue derrotado (desbloquea nivel >100)
+//   'god-summoned'         -> (godId:string) un dios malvado despertó (evento climático + boss)
+//   'achievement-unlocked' -> (achievementId:string) logro desbloqueado
 
 import Phaser from 'phaser';
 

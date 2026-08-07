@@ -21,8 +21,9 @@ npm run dev
 Abre la URL que te muestre Vite (normalmente http://localhost:5173).
 
 Controles: **WASD / flechas** para moverte, **espacio o click izquierdo** para
-atacar (o construir, si el modo construcción está activo), botón 💬 para el
-chat, botón 🔊/🔇 para silenciar el sonido.
+atacar (o construir, si el modo construcción está activo), **E** para
+destruir un altar cercano, **1-4** para lanzar hechizos desbloqueados,
+botón 💬 para el chat, botón 🔊/🔇 para silenciar el sonido.
 
 ## 🌐 Idiomas
 
@@ -102,6 +103,16 @@ verificada. **Nunca se debe escribir un número de tarjeta o cuenta bancaria
 directamente en el código** (es público en GitHub, y además viola normas de
 seguridad de pagos/PCI-DSS) — el dinero siempre debe pasar por el procesador,
 que lo deposita a tu cuenta bancaria por fuera del código fuente.
+
+## ⚔️ Fase 2 (nuevo)
+
+Además del núcleo de Fase 1, el juego ahora incluye:
+
+- **Equipo**: armas/armaduras/accesorios comprables y equipables (botón 🎒), con efecto real en fuerza/velocidad/defensa/maná. Precios de 35 a 1000 oro+diamantes según rareza, con requisito de nivel (y algunos de clase de personaje).
+- **Magia**: maná, 4 hechizos (bola de fuego, curar, barrera, invocar aliado — simplificado a un impulso temporal, ver `magic.js`) que se desbloquean solos al subir de nivel. Se lanzan con las teclas **1-4** o haciendo click en la barra de hechizos (arriba a la derecha).
+- **Dioses malvados y altares**: 4 dioses (mares/vientos/terremotos/volcanes) según el documento de diseño. Los altares aparecen escondidos por el mundo (uno garantizado cerca del punto de aparición) — acércate y presiona **E** para destruirlo (recompensa inmediata, pero cada 10 altares del mismo dios lo despiertan: evento climático + jefe épico). Derrotar a un dios desbloquea progresión de nivel 100 a 1000 y recompensas legendarias.
+- **Territorios raros**: Bosque Encantado y Cueva Ancestral, que se desbloquean domesticando plantas / derrotando un dios. Contienen nodos de cristal (recurso raro) y guardianes reforzados.
+- **Logros** (botón 🏆): 10 logros con recompensas de oro/diamantes.
 
 ## 🗺️ Roadmap — qué falta y qué necesito de ti
 

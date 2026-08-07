@@ -9,8 +9,12 @@ import MenuScene from './scenes/MenuScene.js';
 import WorldScene from './scenes/WorldScene.js';
 import HUDScene from './scenes/HUDScene.js';
 import { wireAutoSounds } from './systems/sound.js';
+import { wireAchievements } from './systems/achievements.js';
+import { wireMagicUnlocks } from './systems/magic.js';
 
 wireAutoSounds();
+wireAchievements();
+wireMagicUnlocks();
 
 const config = {
   type: Phaser.AUTO,

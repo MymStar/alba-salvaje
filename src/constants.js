@@ -38,6 +38,42 @@ export const CURRENCY = {
   GEMS: 'gems'
 };
 
+// ---- Fase 2: equipo, dioses/altares, rareza de ítems ----
+
+export const EQUIP_SLOTS = {
+  WEAPON: 'weapon',
+  ARMOR: 'armor',
+  ACCESSORY: 'accessory'
+};
+
+export const ITEM_RARITY = {
+  BASIC: 'basic', // 1-50 oro
+  INTERMEDIATE: 'intermediate', // 100-500 oro/diamantes
+  LEGENDARY: 'legendary' // 1000 oro + 1000 diamantes
+};
+
+export const WEAPON_RANGE = {
+  SHORT: 'short',
+  MEDIUM: 'medium',
+  LONG: 'long'
+};
+
+// Los 4 dioses malvados del documento de diseño (partes 169-235).
+export const GOD_TYPES = {
+  SEA: 'mares',
+  WIND: 'vientos',
+  QUAKE: 'terremotos',
+  VOLCANO: 'volcanes'
+};
+
+export const LEVEL_CAP_NORMAL = 100;
+export const LEVEL_CAP_GOD = 1000;
+
+// Cuántos altares de un mismo dios hay que destruir para que aparezca el dios (parte 189).
+export const ALTARS_TO_SUMMON_GOD = 10;
+// Cuántos monstruos elementales hay que derrotar para que aparezca un nuevo altar (parte 198).
+export const KILLS_TO_SPAWN_ALTAR = 100;
+
 // Paleta de colores (día vivo / noche fría), usada por el mundo y la UI.
 export const PALETTE = {
   dayTint: 0xffffff,

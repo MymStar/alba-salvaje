@@ -98,7 +98,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     }
 
     const dano = calcPlayerDamage();
-    const grupos = [this.scene?.plantsGroup, this.scene?.zombiesGroup];
+    const grupos = [this.scene?.plantsGroup, this.scene?.zombiesGroup, this.scene?.bossGroup, this.scene?.guardiansGroup];
 
     for (const grupo of grupos) {
       if (!grupo) continue;

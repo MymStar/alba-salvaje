@@ -1,42 +1,57 @@
-// Planta hostil: enemigo lento que persigue al jugador de cerca, ataca por
-// contacto y huye cuando le queda poca vida. También puede domesticarse
-// (transformarse en aliada) según el documento de diseño.
+// Guardián de zona rara: enemigo reforzado que protege los territorios raros
+// (parte 149, simplificado a un guardián fuerte reutilizable en vez de un
+// boss único por territorio). Mismo patrón que Zombie.js (perseguir, atacar
+// por contacto con cooldown, huir con poca vida) pero más agresivo y con
+// recompensas mayores. Reutiliza la textura TEX.ZOMBIE agrandada y teñida de
+// morado para diferenciarse visualmente sin necesitar un sprite nuevo.
 
 import Phaser from 'phaser';
 import { TEX } from '../textureKeys.js';
-import { GameState, damagePlayer, addXP, addItem } from '../state.js';
+import { GameState, damagePlayer, addXP, addItem, addGold } from '../state.js';
+import { playSound } from '../systems/sound.js';
 import { EventBus } from '../eventBus.js';
 
-const HP_MIN = 20;
-const HP_MAX = 30;
-const AGGRO_RANGE = 180;
-const ATTACK_RANGE = 26;
-const ATTACK_COOLDOWN_MS = 1300;
-const ATTACK_DMG_MIN = 4;
-const ATTACK_DMG_MAX = 6;
-const MOVE_SPEED = 55; // más lenta que el jugador (PLAYER_SPEED=160)
-const FLEE_HP_RATIO = 0.2;
-const FLEE_DURATION_MS = 2500;
-const XP_REWARD = 8;
+const HP_MIN = 120;
+const HP_MAX = 150;
+const AGGRO_RANGE = 220;
+const ATTACK_RANGE = 30;
+const ATTACK_COOLDOWN_MS = 900;
+const ATTACK_DMG_MIN = 12;
+const ATTACK_DMG_MAX = 20;
+const MOVE_SPEED = 110;
+const FLEE_HP_RATIO = 0.15; // más agresivo que el zombi normal: huye recién con muy poca vida
+const FLEE_DURATION_MS = 1500;
+const XP_REWARD = 40;
+const CRYSTAL_DROP_MIN = 1;
+const CRYSTAL_DROP_MAX = 2;
+const GOLD_DROP_CHANCE = 0.4;
+const GOLD_DROP_MIN = 40;
+const GOLD_DROP_MAX = 90;
+const SCALE = 1.6;
+const TINT = 0x8a4fd9;
 
-export default class PlantEnemy extends Phaser.Physics.Arcade.Sprite {
+export default class ZoneGuardian extends Phaser.Physics.Arcade.Sprite {
   /**
-   * Crea y registra una planta hostil en la escena.
+   * Crea y registra un guardián de zona en la escena.
    * @param {Phaser.Scene} scene
    * @param {number} x
    * @param {number} y
-   * @returns {PlantEnemy}
+   * @returns {ZoneGuardian}
    */
   static spawn(scene, x, y) {
-    const plant = new PlantEnemy(scene, x, y);
-    scene.add.existing(plant);
-    scene.physics.add.existing(plant);
-    if (scene.plantsGroup) scene.plantsGroup.add(plant);
-    return plant;
+    const guardian = new ZoneGuardian(scene, x, y);
+    scene.add.existing(guardian);
+    scene.physics.add.existing(guardian);
+    scene.guardiansGroup ??= scene.physics.add.group();
+    scene.guardiansGroup.add(guardian);
+    return guardian;
   }
 
   constructor(scene, x, y) {
-    super(scene, x, y, TEX.PLANT_HOSTILE);
+    super(scene, x, y, TEX.ZOMBIE);
+
+    this.setScale(SCALE);
+    this.setTint(TINT);
 
     this.maxHp = Phaser.Math.Between(HP_MIN, HP_MAX);
     this.hp = this.maxHp;
@@ -47,8 +62,6 @@ export default class PlantEnemy extends Phaser.Physics.Arcade.Sprite {
 
     this.fleeing = false;
     this.fleeUntil = 0;
-
-    this.domesticada = false;
   }
 
   /**
@@ -58,10 +71,6 @@ export default class PlantEnemy extends Phaser.Physics.Arcade.Sprite {
    */
   update(time, delta, player) {
     if (this.dying || !this.active) return;
-    if (this.domesticada) {
-      this.setVelocity(0, 0);
-      return;
-    }
     if (!player || !GameState.player.alive) {
       this.setVelocity(0, 0);
       return;
@@ -69,7 +78,6 @@ export default class PlantEnemy extends Phaser.Physics.Arcade.Sprite {
 
     const dist = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
 
-    // Huida si la vida está muy baja
     if (this.hp <= this.maxHp * FLEE_HP_RATIO) {
       if (!this.fleeing) {
         this.fleeing = true;
@@ -94,6 +102,7 @@ export default class PlantEnemy extends Phaser.Physics.Arcade.Sprite {
       const dy = player.y - this.y;
       const len = Math.max(1, Math.sqrt(dx * dx + dy * dy));
       this.setVelocity((dx / len) * MOVE_SPEED, (dy / len) * MOVE_SPEED);
+      if (dx !== 0) this.setFlipX(dx < 0);
 
       if (dist < ATTACK_RANGE && time - this.lastAttack > ATTACK_COOLDOWN_MS) {
         this.lastAttack = time;
@@ -105,7 +114,7 @@ export default class PlantEnemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * Resta vida a la planta; si llega a 0, muere y otorga recompensas.
+   * Resta vida al guardián; si llega a 0, muere y otorga recompensas altas.
    * @param {number} amount
    */
   takeDamage(amount) {
@@ -114,9 +123,8 @@ export default class PlantEnemy extends Phaser.Physics.Arcade.Sprite {
     if (this.hp <= 0) {
       this.#morir();
     } else {
-      // pequeño feedback visual de golpe
       this.setTintFill(0xffffff);
-      this.scene?.time?.delayedCall(80, () => this.active && this.clearTint());
+      this.scene?.time?.delayedCall(80, () => this.active && this.setTint(TINT));
     }
   }
 
@@ -126,9 +134,12 @@ export default class PlantEnemy extends Phaser.Physics.Arcade.Sprite {
     if (this.body) this.body.enable = false;
 
     addXP(XP_REWARD);
-    EventBus.emit('enemy-killed', 'plant');
-    const tipo = Math.random() < 0.5 ? 'fiber' : 'food_fruit';
-    addItem(tipo, Phaser.Math.Between(1, 2));
+    EventBus.emit('enemy-killed', 'zone_guardian');
+    addItem('crystal', Phaser.Math.Between(CRYSTAL_DROP_MIN, CRYSTAL_DROP_MAX));
+    if (Math.random() < GOLD_DROP_CHANCE) {
+      addGold(Phaser.Math.Between(GOLD_DROP_MIN, GOLD_DROP_MAX));
+      playSound('coin');
+    }
 
     if (this.scene?.tweens) {
       this.scene.tweens.add({
@@ -141,18 +152,5 @@ export default class PlantEnemy extends Phaser.Physics.Arcade.Sprite {
     } else {
       this.destroy();
     }
-  }
-
-  /**
-   * Domestica la planta: deja de ser hostil y pasa a textura aliada.
-   * TODO Fase 2: comportamiento completo de aliada (seguir al jugador, ayudar en combate, etc.)
-   */
-  tame() {
-    if (this.dying) return;
-    this.domesticada = true;
-    this.fleeing = false;
-    this.setTexture(TEX.PLANT_ALLY);
-    this.setVelocity(0, 0);
-    EventBus.emit('plant-tamed');
   }
 }
