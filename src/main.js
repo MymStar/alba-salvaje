@@ -11,10 +11,17 @@ import HUDScene from './scenes/HUDScene.js';
 import { wireAutoSounds } from './systems/sound.js';
 import { wireAchievements } from './systems/achievements.js';
 import { wireMagicUnlocks } from './systems/magic.js';
+import { initPlayerRegistry, publishMyProfile } from './net/playerRegistry.js';
+import { EventBus } from './eventBus.js';
 
 wireAutoSounds();
 wireAchievements();
 wireMagicUnlocks();
+
+initPlayerRegistry();
+// Mantiene el perfil público (nivel) al día para que otros jugadores lo vean
+// al buscarte (matrimonio, clanes). Los errores se ignoran (offline/local).
+EventBus.on('levelup', () => publishMyProfile().catch(() => {}));
 
 const config = {
   type: Phaser.AUTO,
