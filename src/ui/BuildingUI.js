@@ -5,27 +5,16 @@
 import { PALETTE, BUILDABLE_TYPES } from '../constants.js';
 import { TEX } from '../textureKeys.js';
 import { setSelectedBuildType } from '../buildSelection.js';
+import { t } from '../i18n.js';
+import { playSound } from '../systems/sound.js';
 
-const BUILD_OPTIONS = [
-  {
-    type: BUILDABLE_TYPES.WALL_WOOD,
-    name: 'Muro de madera',
-    icon: TEX.BUILD_WALL_WOOD,
-    costLabel: '3 madera'
-  },
-  {
-    type: BUILDABLE_TYPES.FARM_PLOT,
-    name: 'Granja',
-    icon: TEX.BUILD_FARM_PLOT,
-    costLabel: '2 madera + 1 fibra'
-  },
-  {
-    type: BUILDABLE_TYPES.DOOR,
-    name: 'Puerta',
-    icon: TEX.BUILD_DOOR,
-    costLabel: '2 madera'
-  }
-];
+function buildOptions() {
+  return [
+    { type: BUILDABLE_TYPES.WALL_WOOD, name: t('build.wall'), icon: TEX.BUILD_WALL_WOOD, costLabel: t('build.wall.cost') },
+    { type: BUILDABLE_TYPES.FARM_PLOT, name: t('build.farm'), icon: TEX.BUILD_FARM_PLOT, costLabel: t('build.farm.cost') },
+    { type: BUILDABLE_TYPES.DOOR, name: t('build.door'), icon: TEX.BUILD_DOOR, costLabel: t('build.door.cost') }
+  ];
+}
 
 /**
  * Abre el menú de construcción sobre el HUD.
@@ -52,7 +41,7 @@ export function openBuildMenu(hudScene) {
   panel.setStrokeStyle(2, PALETTE.uiAccent, 1);
   container.add(panel);
 
-  const title = hudScene.add.text(panelX + 16, panelY + 12, 'Construir', {
+  const title = hudScene.add.text(panelX + 16, panelY + 12, t('build.title'), {
     fontFamily: 'Segoe UI, sans-serif',
     fontSize: '18px',
     color: '#ffcc4d',
@@ -69,7 +58,7 @@ export function openBuildMenu(hudScene) {
   container.add(closeBtn);
 
   let y = panelY + 50;
-  BUILD_OPTIONS.forEach((opt) => {
+  buildOptions().forEach((opt) => {
     const rowBg = hudScene.add.rectangle(panelX + 16, y, panelW - 32, 64, 0x1c212b, 1)
       .setOrigin(0, 0)
       .setStrokeStyle(1, 0x333944, 1)
@@ -81,13 +70,14 @@ export function openBuildMenu(hudScene) {
       color: '#e8e8e8',
       fontStyle: 'bold'
     });
-    const cost = hudScene.add.text(panelX + 76, y + 36, `Costo: ${opt.costLabel}`, {
+    const cost = hudScene.add.text(panelX + 76, y + 36, opt.costLabel, {
       fontFamily: 'Segoe UI, sans-serif',
       fontSize: '12px',
       color: '#8a93a3'
     });
 
     rowBg.on('pointerup', () => {
+      playSound('notify');
       setSelectedBuildType(opt.type);
       closeBuildMenu(hudScene);
     });

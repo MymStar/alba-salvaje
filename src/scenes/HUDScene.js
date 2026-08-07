@@ -9,6 +9,8 @@ import { createInventoryBar } from '../ui/InventoryUI.js';
 import { openShop } from '../ui/ShopUI.js';
 import { openBuildMenu } from '../ui/BuildingUI.js';
 import { createChatPanel } from '../ui/ChatUI.js';
+import { t } from '../i18n.js';
+import { isMuted, toggleMuted, playSound } from '../systems/sound.js';
 
 // HUDScene corre en paralelo a WorldScene (lanzada por WorldScene con
 // this.scene.launch). Solo dibuja UI encima del mundo: no toca la lógica
@@ -61,13 +63,13 @@ export default class HUDScene extends Phaser.Scene {
     const x = 16;
     let y = 16;
 
-    this._hpBar = this.#createBar(x, y, PALETTE.hp, 'Vida');
+    this._hpBar = this.#createBar(x, y, PALETTE.hp, t('hud.bar.hp', { cur: 0, max: 0 }));
     y += BAR_H + BAR_GAP;
-    this._energyBar = this.#createBar(x, y, PALETTE.energy, 'Energía');
+    this._energyBar = this.#createBar(x, y, PALETTE.energy, t('hud.bar.energy', { cur: 0, max: 0 }));
     y += BAR_H + BAR_GAP;
-    this._hungerBar = this.#createBar(x, y, PALETTE.hunger, 'Hambre');
+    this._hungerBar = this.#createBar(x, y, PALETTE.hunger, t('hud.bar.hunger', { cur: 0, max: 0 }));
     y += BAR_H + BAR_GAP;
-    this._xpBar = this.#createBar(x, y, PALETTE.xp, 'Nivel 1');
+    this._xpBar = this.#createBar(x, y, PALETTE.xp, t('hud.bar.level', { level: 1, xp: 0, xpNext: 0 }));
   }
 
   #createBar(x, y, color, label) {
@@ -90,10 +92,10 @@ export default class HUDScene extends Phaser.Scene {
 
   #refreshStats() {
     const p = GameState.player;
-    this.#setBarValue(this._hpBar, p.hp, p.maxHp, `Vida ${Math.round(p.hp)}/${p.maxHp}`);
-    this.#setBarValue(this._energyBar, p.energy, p.maxEnergy, `Energía ${Math.round(p.energy)}/${p.maxEnergy}`);
-    this.#setBarValue(this._hungerBar, p.hunger, p.maxHunger, `Hambre ${Math.round(p.hunger)}/${p.maxHunger}`);
-    this.#setBarValue(this._xpBar, p.xp, p.xpToNext, `Nivel ${p.level} — XP ${p.xp}/${p.xpToNext}`);
+    this.#setBarValue(this._hpBar, p.hp, p.maxHp, t('hud.bar.hp', { cur: Math.round(p.hp), max: p.maxHp }));
+    this.#setBarValue(this._energyBar, p.energy, p.maxEnergy, t('hud.bar.energy', { cur: Math.round(p.energy), max: p.maxEnergy }));
+    this.#setBarValue(this._hungerBar, p.hunger, p.maxHunger, t('hud.bar.hunger', { cur: Math.round(p.hunger), max: p.maxHunger }));
+    this.#setBarValue(this._xpBar, p.xp, p.xpToNext, t('hud.bar.level', { level: p.level, xp: p.xp, xpNext: p.xpToNext }));
   }
 
   // ---------------- Oro / diamantes ----------------
@@ -123,17 +125,18 @@ export default class HUDScene extends Phaser.Scene {
   #buildActionButtons() {
     const h = this.scale.height;
     const buttons = [
-      { label: '🏪 Tienda', onClick: () => openShop(this) },
+      { label: t('hud.btn.shop'), onClick: () => { playSound('notify'); openShop(this); } },
       {
-        label: '🔨 Construir',
+        label: t('hud.btn.build'),
         onClick: () => {
+          playSound('notify');
           const active = !isBuildModeActive();
           setBuildModeActive(active);
           EventBus.emit('build-mode-changed', active);
           openBuildMenu(this);
         }
       },
-      { label: '💬 Chat', onClick: () => this._chatApi && this._chatApi.toggle() }
+      { label: t('hud.btn.chat'), onClick: () => { playSound('notify'); this._chatApi && this._chatApi.toggle(); } }
     ];
 
     let x = 16;
@@ -148,6 +151,20 @@ export default class HUDScene extends Phaser.Scene {
       }).setScrollFactor(0).setDepth(400).setInteractive({ useHandCursor: true });
       btn.on('pointerup', btnDef.onClick);
       x += btn.width + 10;
+    });
+
+    // Botón de silenciar/activar sonido, aparte porque su texto cambia solo.
+    this._muteBtn = this.add.text(x, y, isMuted() ? '🔇' : '🔊', {
+      fontFamily: 'Segoe UI, sans-serif',
+      fontSize: '14px',
+      color: '#14181f',
+      backgroundColor: '#ffcc4d',
+      padding: { x: 10, y: 6 }
+    }).setScrollFactor(0).setDepth(400).setInteractive({ useHandCursor: true });
+    this._muteBtn.on('pointerup', () => {
+      const nowMuted = toggleMuted();
+      this._muteBtn.setText(nowMuted ? '🔇' : '🔊');
+      if (!nowMuted) playSound('notify');
     });
   }
 
@@ -192,7 +209,7 @@ export default class HUDScene extends Phaser.Scene {
   }
 
   #showLevelUp(level) {
-    this._levelUpText.setText(`¡Nivel ${level}!`).setAlpha(1).setScale(0.6);
+    this._levelUpText.setText(t('hud.levelup', { level })).setAlpha(1).setScale(0.6);
     this.tweens.add({
       targets: this._levelUpText,
       scale: 1.15,
@@ -227,7 +244,7 @@ export default class HUDScene extends Phaser.Scene {
     const panel = this.add.rectangle(panelX, panelY, panelW, panelH, PALETTE.uiBg, 0.98).setOrigin(0, 0);
     panel.setStrokeStyle(2, PALETTE.hp, 1);
 
-    const title = this.add.text(w / 2, panelY + 24, 'Has muerto', {
+    const title = this.add.text(w / 2, panelY + 24, t('hud.death.title'), {
       fontFamily: 'Segoe UI, sans-serif', fontSize: '24px', color: '#e0473f', fontStyle: 'bold'
     }).setOrigin(0.5);
 
@@ -239,7 +256,7 @@ export default class HUDScene extends Phaser.Scene {
       fontFamily: 'Segoe UI, sans-serif', fontSize: '12px', color: '#ffcc4d', wordWrap: { width: panelW - 40 }
     }).setOrigin(0.5, 0);
 
-    const reviveBtn = this.add.text(w / 2, panelY + panelH - 60, 'Revivir', {
+    const reviveBtn = this.add.text(w / 2, panelY + panelH - 60, t('hud.death.revive'), {
       fontFamily: 'Segoe UI, sans-serif',
       fontSize: '16px',
       color: '#14181f',
@@ -247,7 +264,7 @@ export default class HUDScene extends Phaser.Scene {
       padding: { x: 16, y: 8 }
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
-    const resetBtn = this.add.text(w / 2, panelY + panelH - 24, 'Reiniciar desde cero', {
+    const resetBtn = this.add.text(w / 2, panelY + panelH - 24, t('hud.death.reset'), {
       fontFamily: 'Segoe UI, sans-serif',
       fontSize: '12px',
       color: '#e8e8e8',
@@ -259,10 +276,11 @@ export default class HUDScene extends Phaser.Scene {
       const cost = getReviveCost();
       const ok = spendCurrency(cost.gold, cost.gems);
       if (ok) {
+        playSound('coin');
         revivePlayer();
         this._deathContainer.setVisible(false);
       } else {
-        messageText.setText('No tienes suficiente oro/diamantes.');
+        messageText.setText(t('hud.death.notEnough'));
         resetBtn.setVisible(true);
       }
     });
@@ -282,7 +300,7 @@ export default class HUDScene extends Phaser.Scene {
 
   #showDeathModal() {
     const cost = getReviveCost();
-    this._deathCostText.setText(`Costo de revivir: ${cost.gold} oro + ${cost.gems} diamantes`);
+    this._deathCostText.setText(t('hud.death.cost', { gold: cost.gold, gems: cost.gems }));
     this._deathMessageText.setText('');
     this._deathResetBtn.setVisible(false);
     this._deathContainer.setVisible(true);

@@ -8,6 +8,9 @@ import BootScene from './scenes/BootScene.js';
 import MenuScene from './scenes/MenuScene.js';
 import WorldScene from './scenes/WorldScene.js';
 import HUDScene from './scenes/HUDScene.js';
+import { wireAutoSounds } from './systems/sound.js';
+
+wireAutoSounds();
 
 const config = {
   type: Phaser.AUTO,

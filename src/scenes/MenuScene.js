@@ -5,13 +5,15 @@ import { PALETTE, GAME_TITLE } from '../constants.js';
 import { GameState, saveState } from '../state.js';
 import { initChat } from '../net/chat.js';
 import { renderLegalOverlay } from '../ui/LegalPages.js';
+import { t, getLanguage, getAvailableLanguages, setLanguage } from '../i18n.js';
+import { unlockAudio, playSound } from '../systems/sound.js';
 
 // Pantalla de título: elección de personaje + botón Jugar + pie de página legal.
 
 const CHARACTERS = [
-  { id: 'guerrero', name: 'Guerrero', tex: TEX.PLAYER_GUERRERO },
-  { id: 'exploradora', name: 'Exploradora', tex: TEX.PLAYER_EXPLORADORA },
-  { id: 'mago', name: 'Mago', tex: TEX.PLAYER_MAGO }
+  { id: 'guerrero', nameKey: 'char.guerrero', tex: TEX.PLAYER_GUERRERO },
+  { id: 'exploradora', nameKey: 'char.exploradora', tex: TEX.PLAYER_EXPLORADORA },
+  { id: 'mago', nameKey: 'char.mago', tex: TEX.PLAYER_MAGO }
 ];
 
 export default class MenuScene extends Phaser.Scene {
@@ -25,10 +27,17 @@ export default class MenuScene extends Phaser.Scene {
     // cuando el jugador llegue al HUD.
     initChat();
 
+    // El audio del navegador está bloqueado hasta el primer gesto del
+    // usuario; el primer click/tecla en el menú lo desbloquea para todo el juego.
+    this.input.once('pointerdown', unlockAudio);
+    this.input.keyboard.once('keydown', unlockAudio);
+
     const w = this.scale.width;
     const h = this.scale.height;
 
     this.add.rectangle(0, 0, w, h, 0x0b0f14, 1).setOrigin(0, 0);
+
+    this.#buildLanguageSelector(w);
 
     this.add.text(w / 2, h * 0.14, GAME_TITLE, {
       fontFamily: 'Segoe UI, sans-serif',
@@ -37,7 +46,7 @@ export default class MenuScene extends Phaser.Scene {
       fontStyle: 'bold'
     }).setOrigin(0.5);
 
-    this.add.text(w / 2, h * 0.14 + 46, 'Un mundo abierto por explorar, construir y sobrevivir', {
+    this.add.text(w / 2, h * 0.14 + 46, t('menu.subtitle'), {
       fontFamily: 'Segoe UI, sans-serif',
       fontSize: '16px',
       color: '#cfd6e0'
@@ -67,7 +76,7 @@ export default class MenuScene extends Phaser.Scene {
     const playBtn = this.add.rectangle(playX, playY, playW, playH, PALETTE.uiAccent, 1)
       .setOrigin(0, 0)
       .setInteractive({ useHandCursor: true });
-    this.add.text(playX + playW / 2, playY + playH / 2, 'Jugar', {
+    this.add.text(playX + playW / 2, playY + playH / 2, t('menu.play'), {
       fontFamily: 'Segoe UI, sans-serif',
       fontSize: '26px',
       color: '#14181f',
@@ -77,6 +86,7 @@ export default class MenuScene extends Phaser.Scene {
     playBtn.on('pointerover', () => playBtn.setScale(1.03));
     playBtn.on('pointerout', () => playBtn.setScale(1));
     playBtn.on('pointerup', () => {
+      playSound('build');
       saveState();
       this.scene.start(SCENES.WORLD);
     });
@@ -84,9 +94,9 @@ export default class MenuScene extends Phaser.Scene {
     // ---- Pie de página: links legales ----
     const footerY = h - 24;
     const links = [
-      { label: 'EULA', kind: 'eula' },
-      { label: 'Privacidad', kind: 'privacy' },
-      { label: 'Créditos', kind: 'credits' }
+      { label: t('menu.footer.eula'), kind: 'eula' },
+      { label: t('menu.footer.privacy'), kind: 'privacy' },
+      { label: t('menu.footer.credits'), kind: 'credits' }
     ];
     const linkGap = 90;
     const linkStartX = w / 2 - ((links.length - 1) * linkGap) / 2;
@@ -104,6 +114,30 @@ export default class MenuScene extends Phaser.Scene {
     });
   }
 
+  /** Fila de banderas arriba a la derecha para elegir idioma (cambiarlo recarga la página). */
+  #buildLanguageSelector(w) {
+    const current = getLanguage();
+    const langs = getAvailableLanguages();
+    const size = 30;
+    const gap = 6;
+    const totalW = langs.length * size + (langs.length - 1) * gap;
+    const startX = w - 16 - totalW;
+    const y = 14;
+
+    langs.forEach((lang, i) => {
+      const x = startX + i * (size + gap);
+      const selected = lang.code === current;
+      const box = this.add.rectangle(x, y, size, size, PALETTE.uiBg, selected ? 1 : 0.5)
+        .setOrigin(0, 0)
+        .setStrokeStyle(selected ? 2 : 1, selected ? PALETTE.uiAccent : 0x333944, 1)
+        .setInteractive({ useHandCursor: true });
+      this.add.text(x + size / 2, y + size / 2, lang.flag, { fontSize: '16px' }).setOrigin(0.5);
+      box.on('pointerup', () => {
+        if (lang.code !== current) setLanguage(lang.code);
+      });
+    });
+  }
+
   #buildCharacterCard(char, x, y, cardW, cardH) {
     const container = this.add.container(x, y);
 
@@ -113,7 +147,7 @@ export default class MenuScene extends Phaser.Scene {
 
     const sprite = this.add.image(cardW / 2, cardH * 0.42, char.tex).setScale(1.6);
 
-    const label = this.add.text(cardW / 2, cardH - 30, char.name, {
+    const label = this.add.text(cardW / 2, cardH - 30, t(char.nameKey), {
       fontFamily: 'Segoe UI, sans-serif',
       fontSize: '16px',
       color: '#e8e8e8',
@@ -123,7 +157,8 @@ export default class MenuScene extends Phaser.Scene {
     container.add([bg, sprite, label]);
 
     bg.on('pointerup', () => {
-      GameState.character = { id: char.id, name: char.name };
+      playSound('notify');
+      GameState.character = { id: char.id, name: t(char.nameKey) };
       this.#highlightSelected();
     });
 

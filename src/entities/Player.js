@@ -6,6 +6,7 @@ import { TEX } from '../textureKeys.js';
 import { PLAYER_SPEED } from '../constants.js';
 import { GameState } from '../state.js';
 import { dealDamageToEnemy, calcPlayerDamage } from '../systems/combat.js';
+import { playSound } from '../systems/sound.js';
 
 const ATTACK_COOLDOWN_MS = 400;
 const ATTACK_RANGE = 30;
@@ -81,6 +82,7 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     const now = Date.now();
     if (now - this.lastAttack < ATTACK_COOLDOWN_MS) return;
     this.lastAttack = now;
+    playSound('attack');
 
     // Efecto visual simple: flash + lunge corto en la dirección actual.
     if (this.scene?.tweens) {

@@ -21,8 +21,24 @@ npm run dev
 Abre la URL que te muestre Vite (normalmente http://localhost:5173).
 
 Controles: **WASD / flechas** para moverte, **espacio o click izquierdo** para
-atacar (o construir, si el modo construcción está activo), **E** o botón 💬
-para el chat.
+atacar (o construir, si el modo construcción está activo), botón 💬 para el
+chat, botón 🔊/🔇 para silenciar el sonido.
+
+## 🌐 Idiomas
+
+El menú principal tiene un selector de banderas (arriba a la derecha):
+**Español, English, Português, Français**. Cubre el menú, el HUD, el menú de
+construcción, el chat y los avisos en pantalla. La ficha detallada de la
+tienda y los textos legales completos (EULA/Privacidad) siguen solo en
+español por ahora — son textos largos que conviene traducir con más cuidado
+(y en el caso legal, con revisión humana) en una siguiente pasada.
+
+## 🔊 Sonido
+
+Todos los efectos (golpes, construir, subir de nivel, morir, avisos, mensajes
+de chat, ambiente de día/noche) se generan por código con Web Audio
+(osciladores + ruido blanco) — no hay archivos de audio externos, así el
+juego sigue siendo ligero. Se puede silenciar con el botón 🔊/🔇 del HUD.
 
 ## 🧱 Stack técnico
 

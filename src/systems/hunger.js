@@ -2,6 +2,8 @@
 
 import { changeHunger, changeEnergy, damagePlayer, GameState, hasItem, removeItem, addXP } from '../state.js';
 import { EventBus } from '../eventBus.js';
+import { t } from '../i18n.js';
+import { playSound } from './sound.js';
 
 const TICK_DELAY_MS = 4000;
 const HUNGER_DRAIN = 2;
@@ -40,11 +42,12 @@ export function startSurvivalTicker(scene) {
  */
 export function eatFood(type) {
   if (!hasItem(type)) {
-    EventBus.emit('notify', 'No tienes esa comida');
+    EventBus.emit('notify', t('notify.noFood'));
     return;
   }
   removeItem(type, 1);
   const cura = type === 'food_meat' ? 50 : type === 'food_fruit' ? 30 : 20;
   changeHunger(cura);
   addXP(5);
+  playSound('coin');
 }

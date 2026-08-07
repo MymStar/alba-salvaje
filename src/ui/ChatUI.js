@@ -5,6 +5,7 @@
 import { PALETTE } from '../constants.js';
 import { EventBus } from '../eventBus.js';
 import { sendChatMessage } from '../net/chat.js';
+import { t } from '../i18n.js';
 
 const PANEL_W = 300;
 const PANEL_H = 260;
@@ -30,7 +31,7 @@ export function createChatPanel(hudScene) {
     .setStrokeStyle(2, PALETTE.uiAccent, 1);
   container.add(bg);
 
-  const title = hudScene.add.text(panelX + 10, panelY + 6, 'Chat', {
+  const title = hudScene.add.text(panelX + 10, panelY + 6, t('chat.title'), {
     fontFamily: 'Segoe UI, sans-serif',
     fontSize: '13px',
     color: '#ffcc4d',
@@ -68,7 +69,7 @@ export function createChatPanel(hudScene) {
   const sendBtn = hudScene.add.text(
     panelX + PANEL_W - sendBtnW - 4,
     inputAreaY,
-    'Enviar',
+    t('chat.send'),
     {
       fontFamily: 'Segoe UI, sans-serif',
       fontSize: '11px',
@@ -83,7 +84,7 @@ export function createChatPanel(hudScene) {
   const inputEl = document.createElement('input');
   inputEl.type = 'text';
   inputEl.maxLength = 200;
-  inputEl.placeholder = 'Escribe un mensaje…';
+  inputEl.placeholder = t('chat.placeholder');
   inputEl.style.position = 'absolute';
   inputEl.style.boxSizing = 'border-box';
   inputEl.style.fontFamily = 'Segoe UI, sans-serif';
@@ -147,7 +148,7 @@ export function createChatPanel(hudScene) {
     refreshMessagesText();
   };
   const onMode = (mode) => {
-    modeNote.setText(mode === 'offline' ? '(local — activa Firebase para chat global)' : '(en línea)');
+    modeNote.setText(mode === 'offline' ? t('chat.offline') : t('chat.online'));
   };
 
   EventBus.on('chat-history', onHistory);

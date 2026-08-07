@@ -6,6 +6,8 @@ import { STORAGE_KEYS, TILE_SIZE, CHUNK_SIZE, BUILDABLE_TYPES, RESOURCE_TYPES } 
 import { TEX } from '../textureKeys.js';
 import { EventBus } from '../eventBus.js';
 import { hasItem, removeItem } from '../state.js';
+import { t } from '../i18n.js';
+import { playSound } from '../systems/sound.js';
 
 /** Clave de texto única para un chunk, usada como sufijo de localStorage y como id en memoria. */
 export function getChunkKey(cx, cy) {
@@ -88,7 +90,7 @@ export function placeBuilding(scene, worldTileX, worldTileY, buildType) {
 
   const canAfford = cost.every((c) => hasItem(c.type, c.qty));
   if (!canAfford) {
-    EventBus.emit('notify', 'Recursos insuficientes');
+    EventBus.emit('notify', t('notify.insufficientResources'));
     return null;
   }
 
@@ -102,7 +104,8 @@ export function placeBuilding(scene, worldTileX, worldTileY, buildType) {
   buildings.push({ x: worldTileX, y: worldTileY, type: buildType });
   saveChunkBuildings(cx, cy, buildings);
 
-  EventBus.emit('notify', '¡Construido!');
+  playSound('build');
+  EventBus.emit('notify', t('notify.built'));
   return sprite;
 }
 

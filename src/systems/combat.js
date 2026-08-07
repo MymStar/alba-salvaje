@@ -2,6 +2,7 @@
 // Módulo pequeño y sin estado propio para que Player/PlantEnemy/Zombie lo compartan.
 
 import { GameState } from '../state.js';
+import { playSound } from './sound.js';
 
 /**
  * Aplica daño a un enemigo (PlantEnemy/Zombie) de forma segura.
@@ -10,6 +11,7 @@ import { GameState } from '../state.js';
  */
 export function dealDamageToEnemy(enemy, amount) {
   if (!enemy || !enemy.active || typeof enemy.takeDamage !== 'function') return;
+  playSound('hit');
   enemy.takeDamage(amount);
 }
 
