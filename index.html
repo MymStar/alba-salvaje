@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
+    <title>Alba Salvaje — Supervivencia</title>
+    <meta name="description" content="Alba Salvaje: prototipo de juego de supervivencia de mundo abierto, ligero y multiplataforma." />
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: #0b0f14;
+        overflow: hidden;
+        width: 100%;
+        height: 100%;
+        font-family: 'Segoe UI', system-ui, sans-serif;
+      }
+      #game-container {
+        width: 100vw;
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      canvas {
+        image-rendering: pixelated;
+        max-width: 100vw;
+        max-height: 100vh;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game-container"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

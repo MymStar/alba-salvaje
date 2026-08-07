@@ -1,0 +1,26 @@
+rules_version = '2';
+
+// Reglas de seguridad para el chat global (colección "chat_global").
+// Pega esto en Firebase Console -> Firestore Database -> Reglas -> Publicar.
+//
+// Cualquiera puede LEER el chat (es público). Para ESCRIBIR se exige que el
+// mensaje tenga la forma correcta y un texto corto, para evitar abuso básico.
+// Es un punto de partida razonable para un prototipo; para producción real
+// conviene añadir autenticación (Firebase Auth) y limitar mensajes por usuario/minuto
+// con Cloud Functions o App Check.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /chat_global/{messageId} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasOnly(['name', 'text', 'ts'])
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() > 0
+                    && request.resource.data.name.size() <= 20
+                    && request.resource.data.text is string
+                    && request.resource.data.text.size() > 0
+                    && request.resource.data.text.size() <= 200;
+      allow update, delete: if false;
+    }
+  }
+}
