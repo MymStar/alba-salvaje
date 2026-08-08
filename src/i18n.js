@@ -81,6 +81,11 @@ const DICTS = {
     'item.ring_mana': 'Anillo de maná',
     'item.boots_swift': 'Botas veloces',
     'item.amulet_divine': 'Amuleto divino',
+    'item.pickaxe_basic': 'Pico de piedra',
+    'item.axe_basic': 'Hacha de piedra',
+    'item.hammer_basic': 'Martillo de piedra',
+    'item.pickaxe_iron': 'Pico de hierro',
+    'item.axe_iron': 'Hacha de hierro',
 
     // ---- Fase 2 ----
     'notify.levelTooLow': 'Necesitas más nivel para esto',
@@ -128,7 +133,39 @@ const DICTS = {
     'market.buy': 'Comprar',
     'market.offline': '(local — activa Firebase para mercado global)',
     'market.noListings': 'No hay ofertas todavía',
-    'market.price': 'Precio'
+    'market.price': 'Precio',
+
+    // ---- Fase 3 (2026-08-08): personajes múltiples, género, mundo vivo ----
+    'menu.chooseCharacter': 'Elige tu personaje',
+    'menu.newCharacter': '+ Nuevo',
+    'menu.createTitle': 'Crear personaje',
+    'menu.namePlaceholder': 'Nombre del personaje…',
+    'menu.gender': 'Género',
+    'menu.gender.male': '♂ Masculino',
+    'menu.gender.female': '♀ Femenino',
+    'menu.create': 'Crear',
+    'menu.cancel': 'Cancelar',
+    'menu.delete': 'Borrar',
+    'menu.delete.confirm': '¿Seguro? Toca de nuevo',
+    'menu.noCharacters': 'Todavía no tienes personajes. ¡Crea el primero!',
+    'menu.slotsFull': 'Llegaste al máximo de personajes ({max})',
+    'menu.level': 'Nv. {level}',
+
+    'hud.death.restartCharacter': 'Empezar de cero con este personaje',
+    'hud.death.restartConfirm': '¿Seguro? Perderás todo el progreso de este personaje. Toca de nuevo para confirmar.',
+
+    'build.campfire': 'Fogata',
+    'build.campfire.cost': 'Costo: 4 madera + 1 piedra',
+
+    'equip.tool': 'Herramienta',
+
+    'notify.needTool': 'Necesitas la herramienta correcta equipada',
+    'notify.gathered': 'Recolectado',
+    'notify.structureDestroyed': 'Estructura destruida',
+    'notify.caveEnter': 'Entras a la cueva… mejor enciende una fogata',
+    'notify.caveExit': 'Sales de la cueva',
+    'notify.chestOpened': '¡Cofre abierto!',
+    'notify.chestEmpty': 'Este cofre ya estaba vacío'
   },
   en: {
     'menu.subtitle': 'An open world to explore, build in, and survive',

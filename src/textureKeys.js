@@ -22,6 +22,7 @@ export const TEX = {
   BUILD_WALL_WOOD: 'build_wall_wood',
   BUILD_FARM_PLOT: 'build_farm_plot',
   BUILD_DOOR: 'build_door',
+  BUILD_CAMPFIRE_ICON: 'build_campfire_icon', // icono para el menú de construcción (la fogata real la dibuja world/campfire.js)
 
   ICON_WOOD: 'icon_wood',
   ICON_STONE: 'icon_stone',
@@ -42,6 +43,9 @@ export const TEX = {
   ICON_RING: 'icon_ring',
   ICON_BOOTS: 'icon_boots',
   ICON_AMULET: 'icon_amulet',
+  ICON_PICKAXE: 'icon_pickaxe',
+  ICON_AXE: 'icon_axe',
+  ICON_HAMMER: 'icon_hammer',
 
   // ---- Fase 2: dioses, altares, jefes ----
   ALTAR: 'altar',

@@ -12,7 +12,9 @@ function buildOptions() {
   return [
     { type: BUILDABLE_TYPES.WALL_WOOD, name: t('build.wall'), icon: TEX.BUILD_WALL_WOOD, costLabel: t('build.wall.cost') },
     { type: BUILDABLE_TYPES.FARM_PLOT, name: t('build.farm'), icon: TEX.BUILD_FARM_PLOT, costLabel: t('build.farm.cost') },
-    { type: BUILDABLE_TYPES.DOOR, name: t('build.door'), icon: TEX.BUILD_DOOR, costLabel: t('build.door.cost') }
+    { type: BUILDABLE_TYPES.DOOR, name: t('build.door'), icon: TEX.BUILD_DOOR, costLabel: t('build.door.cost') },
+    // Fase 3 (parte 13): fogata, para ver de noche/en cuevas.
+    { type: BUILDABLE_TYPES.CAMPFIRE, name: t('build.campfire'), icon: TEX.BUILD_CAMPFIRE_ICON, costLabel: t('build.campfire.cost') }
   ];
 }
 
@@ -33,7 +35,7 @@ export function openBuildMenu(hudScene) {
   container.add(bg);
 
   const panelW = Math.min(360, w - 40);
-  const panelH = 3 * 76 + 70;
+  const panelH = buildOptions().length * 76 + 70;
   const panelX = w / 2 - panelW / 2;
   const panelY = h / 2 - panelH / 2;
 

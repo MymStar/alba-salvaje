@@ -1,33 +1,50 @@
 import Phaser from 'phaser';
 import { SCENES } from '../sceneKeys.js';
 import { TEX } from '../textureKeys.js';
-import { TILE_SIZE, CHUNK_SIZE, RENDER_CHUNK_RADIUS, TILE_TYPES } from '../constants.js';
+import { TILE_SIZE, CHUNK_SIZE, RENDER_CHUNK_RADIUS, TILE_TYPES, BUILDABLE_TYPES } from '../constants.js';
 import { EventBus } from '../eventBus.js';
 import { GameState, saveState } from '../state.js';
 import { getSelectedBuildType, isBuildModeActive } from '../buildSelection.js';
 import { getTileTypeAt } from '../world/terrain.js';
-import { createDayNightCycle, isDaytime } from '../world/dayNight.js';
+import { createDayNightCycle, isDaytime, setForcedDarkness } from '../world/dayNight.js';
 import { getChunkKey, loadChunkBuildings, spawnExistingBuilding, placeBuilding } from '../world/chunkStore.js';
 import { startSurvivalTicker } from '../systems/hunger.js';
 import Player from '../entities/Player.js';
-import PlantEnemy from '../entities/PlantEnemy.js';
-import Zombie from '../entities/Zombie.js';
 import { castSpell, SPELLS } from '../systems/magic.js';
 import { getAltarsForChunk, spawnAltarSprite, destroyAltar } from '../world/altars.js';
 import { checkRareZoneUnlocks, getZoneAt, getTileOverrideAt, spawnCrystalNodes } from '../world/rareZones.js';
 import ZoneGuardian from '../entities/ZoneGuardian.js';
+import { spawnRandomMonster } from '../entities/monsterSpawner.js';
+import { getResourceNodesForChunk, spawnResourceNodeSprite, tryGather, tryDestroyStructure } from '../systems/gathering.js';
+import { getBiomeAt, getDecorationAt } from '../world/biomes.js';
+import {
+  getCaveEntranceForChunk,
+  spawnCaveEntranceSprite,
+  isInsideCave,
+  getCaveTileTypeAt,
+  getCaveRegionOrigin,
+  getCaveExitPoint,
+  getCaveLootForRegion,
+  spawnCaveLootSprite,
+  openCaveLootChest,
+  CAVE_TEX
+} from '../world/caves.js';
+import { attachCampfireLight } from '../world/campfire.js';
+import { registerShadowFollower, addVignette } from '../world/shading.js';
+import { t } from '../i18n.js';
 
 const CHUNK_PX = CHUNK_SIZE * TILE_SIZE;
 
 // Cada cuánto se revisa si hay que spawnear enemigos, y el rango (en px)
 // alrededor del jugador donde pueden aparecer (nunca encima suyo).
-const SPAWN_CHECK_MS = 4000;
+// Fase 3 (partes 3 y 9 del pedido): bichos/plantas/monstruos con MÁS
+// frecuencia que en la Fase 1/2, para subir la dificultad.
+const SPAWN_CHECK_MS = 2200;
 const SPAWN_MIN_DIST = 200;
 const SPAWN_MAX_DIST = 450;
-const MAX_PLANTS = 6;
-const MAX_ZOMBIES = 6;
+const MAX_MONSTERS = 16;
 const MAX_GUARDIANS = 3;
-const ALTAR_INTERACT_RANGE = 50;
+const INTERACT_RANGE = 50; // altares / entrada-salida de cueva / cofres
 
 const AUTOSAVE_MS = 2000;
 
@@ -56,15 +73,27 @@ export default class WorldScene extends Phaser.Scene {
   }
 
   create() {
-    // chunkKey -> { tileImages: Image[], buildingSprites: Sprite[] }
+    // chunkKey -> { tileImages, buildingSprites, altarSprites, decorSprites,
+    //               resourceNodeSprites, caveEntranceSprites, campfireLights }
     this.loadedChunks = new Map();
     this.lastChunkX = null;
     this.lastChunkY = null;
     this.buildingsColliderAdded = false;
+    this.resourceNodesColliderAdded = false;
+    this.decorColliderAdded = false;
+    this.caveWallsColliderAdded = false;
     this.spawningPaused = false;
+
+    // Fase 3 (parte 14): estado de "estoy dentro de una cueva ahora mismo".
+    this.inCave = false;
+    this.currentCaveEntranceId = null;
+    this.caveReturnPos = null;
+    this.caveExitSprite = null;
+    this.caveLootSprites = [];
 
     const spawnX = GameState.world.lastX ?? GameState.world.spawnX ?? 0;
     const spawnY = GameState.world.lastY ?? GameState.world.spawnY ?? 0;
+    this.inCave = isInsideCave(Math.floor(spawnX / TILE_SIZE), Math.floor(spawnY / TILE_SIZE));
 
     // Carga inicial de chunks alrededor del punto de aparición, ANTES de
     // crear al jugador, para que no aparezca sobre un mundo vacío.
@@ -72,17 +101,23 @@ export default class WorldScene extends Phaser.Scene {
 
     this.player = new Player(this, spawnX, spawnY);
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
+    // Fase 3 (parte 11): sombra bajo el jugador (mismo tratamiento que los monstruos).
+    this.playerShadow = registerShadowFollower(this, this.player, { offsetY: 16, scale: 1.1 });
+    // Viñeta sutil de pantalla completa, profundidad ambiental barata (parte 11).
+    addVignette(this);
 
-    // Grupos de física de enemigos (contrato compartido con Agente B: sus
-    // clases se auto-registran en scene.plantsGroup / scene.zombiesGroup).
-    this.plantsGroup = this.physics.add.group();
-    this.zombiesGroup = this.physics.add.group();
+    // Grupo de física de monstruos (Fase 3: catálogo de 50+ tipos, ver
+    // entities/monsterCatalog.js / Monster.js — sustituye a los antiguos
+    // plantsGroup/zombiesGroup, todo pasa por scene.monstersGroup ahora).
+    this.monstersGroup = this.physics.add.group();
     // Fase 2: jefes (dioses) y guardianes de zona se auto-registran igual
     // (scene.bossGroup / scene.guardiansGroup), creados perezosamente por
     // GodBoss.spawn/ZoneGuardian.spawn — los inicializamos ya aquí para que
     // existan desde el primer frame (evita el "??=" perezoso en dos lugares).
     this.bossGroup = this.physics.add.group();
     this.guardiansGroup = this.physics.add.group();
+    // Fase 3: paredes de cueva sólidas (static group, poblado en #loadChunk).
+    this.caveWallsGroup = this.physics.add.staticGroup();
 
     // Input: flechas + WASD combinadas en un único objeto "cursors" con la
     // forma estándar de Phaser (up/down/left/right/space), para que Player
@@ -102,8 +137,18 @@ export default class WorldScene extends Phaser.Scene {
       this.player?.attack?.();
     });
 
-    // Tecla E: destruir el altar más cercano si está en rango (partes 169-201).
-    keyboard.on('keydown-E', () => this.#tryDestroyNearbyAltar());
+    // Tecla E: interactuar — entrar/salir de cueva, abrir cofre, o destruir
+    // el altar más cercano, lo que esté más a mano (partes 6, 14 y 169-201).
+    keyboard.on('keydown-E', () => this.#tryInteract());
+
+    // Fase 3 (partes 5 y 10): F recolecta (pico/hacha en árboles/rocas/
+    // minerales), X demuele una construcción propia (requiere martillo).
+    keyboard.on('keydown-F', () => {
+      if (this.player) tryGather(this, this.player);
+    });
+    keyboard.on('keydown-X', () => {
+      if (this.player) tryDestroyStructure(this, this.player);
+    });
 
     // Teclas 1-4: lanzar los 4 hechizos (en el orden de systems/magic.js#SPELLS).
     SPELLS.forEach((spell, i) => {
@@ -117,7 +162,8 @@ export default class WorldScene extends Phaser.Scene {
       if (isBuildModeActive()) {
         const tileX = Math.floor(pointer.worldX / TILE_SIZE);
         const tileY = Math.floor(pointer.worldY / TILE_SIZE);
-        const sprite = placeBuilding(this, tileX, tileY, getSelectedBuildType());
+        const buildType = getSelectedBuildType();
+        const sprite = placeBuilding(this, tileX, tileY, buildType);
         // Registra la construcción nueva en el chunk cargado en memoria para
         // que el streaming pueda destruirla si luego sale del radio de carga.
         if (sprite) {
@@ -125,6 +171,10 @@ export default class WorldScene extends Phaser.Scene {
           const cy = Math.floor(tileY / CHUNK_SIZE);
           const chunk = this.loadedChunks.get(getChunkKey(cx, cy));
           chunk?.buildingSprites.push(sprite);
+          // Fase 3 (parte 13): la fogata recién construida ilumina de inmediato.
+          if (buildType === BUILDABLE_TYPES.CAMPFIRE) {
+            chunk?.campfireLights.push(attachCampfireLight(this, sprite));
+          }
         }
       } else {
         this.player?.attack?.();
@@ -132,6 +182,7 @@ export default class WorldScene extends Phaser.Scene {
     });
 
     createDayNightCycle(this);
+    setForcedDarkness(this.inCave);
     startSurvivalTicker(this);
 
     // Fase 2: territorios raros. Revisa condiciones ya cumplidas de partidas
@@ -145,7 +196,7 @@ export default class WorldScene extends Phaser.Scene {
     EventBus.on('plant-tamed', onPlantTamed);
     EventBus.on('god-defeated', onGodDefeatedZones);
 
-    // Temporizador de aparición de enemigos: plantas de día, zombis de noche.
+    // Temporizador de aparición de monstruos.
     this.time.addEvent({
       delay: SPAWN_CHECK_MS,
       loop: true,
@@ -168,6 +219,7 @@ export default class WorldScene extends Phaser.Scene {
       EventBus.off('stats-changed', onStatsChanged);
       EventBus.off('plant-tamed', onPlantTamed);
       EventBus.off('god-defeated', onGodDefeatedZones);
+      this.playerShadow?.destroy();
     });
 
     // Autoguardado periódico de la última posición conocida del jugador.
@@ -195,8 +247,7 @@ export default class WorldScene extends Phaser.Scene {
       this.#updateStreaming(this.player.x, this.player.y, false);
     }
 
-    this.plantsGroup?.children.iterate((p) => p?.update?.(time, delta, this.player));
-    this.zombiesGroup?.children.iterate((z) => z?.update?.(time, delta, this.player));
+    this.monstersGroup?.children.iterate((m) => m?.update?.(time, delta, this.player));
     this.bossGroup?.children.iterate((b) => b?.update?.(time, delta, this.player));
     this.guardiansGroup?.children.iterate((g) => g?.update?.(time, delta, this.player));
 
@@ -207,20 +258,40 @@ export default class WorldScene extends Phaser.Scene {
       this.physics.add.collider(this.player, this.buildingsGroup);
       this.buildingsColliderAdded = true;
     }
+    // Fase 3 (parte 10): los nodos de recolección (árboles/rocas/minerales)
+    // también bloquean un poco el paso, igual que las construcciones.
+    if (this.resourceNodesGroup && !this.resourceNodesColliderAdded && this.player) {
+      this.physics.add.collider(this.player, this.resourceNodesGroup);
+      this.resourceNodesColliderAdded = true;
+    }
+    // Fase 3 (parte 14): árboles/rocas de decoración de bioma sólidos.
+    if (this.decorGroup && !this.decorColliderAdded && this.player) {
+      this.physics.add.collider(this.player, this.decorGroup);
+      this.decorColliderAdded = true;
+    }
+    // Fase 3 (parte 14): paredes de cueva.
+    if (!this.caveWallsColliderAdded && this.player && this.caveWallsGroup) {
+      this.physics.add.collider(this.player, this.caveWallsGroup);
+      this.caveWallsColliderAdded = true;
+    }
   }
 
-  /** Aparición periódica de enemigos según la fase del día, con cupo máximo. */
+  /** Aparición periódica de monstruos según la fase del día/bioma, con cupo máximo (partes 3 y 9). */
   #trySpawnEnemies() {
     if (this.spawningPaused || !this.player) return;
 
-    if (isDaytime()) {
-      if ((this.plantsGroup?.getLength() ?? 0) < MAX_PLANTS) {
-        const pos = this.#randomSpawnPosition();
-        if (pos) PlantEnemy.spawn(this, pos.x, pos.y);
-      }
-    } else if ((this.zombiesGroup?.getLength() ?? 0) < MAX_ZOMBIES) {
+    if ((this.monstersGroup?.getLength() ?? 0) < MAX_MONSTERS) {
       const pos = this.#randomSpawnPosition();
-      if (pos) Zombie.spawn(this, pos.x, pos.y);
+      if (pos) {
+        const tileX = Math.floor(pos.x / TILE_SIZE);
+        const tileY = Math.floor(pos.y / TILE_SIZE);
+        spawnRandomMonster(this, pos.x, pos.y, {
+          dayPhase: isDaytime() ? 'day' : 'night',
+          biome: getBiomeAt(tileX, tileY),
+          isCave: this.inCave,
+          playerLevel: GameState.player.level
+        });
+      }
     }
 
     // Fase 2: guardianes de territorio rara (parte 149) — solo aparecen si
@@ -233,14 +304,104 @@ export default class WorldScene extends Phaser.Scene {
     }
   }
 
-  /** Busca un altar cargado en memoria a menos de ALTAR_INTERACT_RANGE px del jugador y lo destruye. */
+  /**
+   * Tecla E: hace la acción más cercana disponible, en este orden — entrar a
+   * una cueva / salir de ella / abrir un cofre de botín / destruir un altar
+   * (partes 6, 14 y 169-201 del pedido).
+   */
+  #tryInteract() {
+    if (!this.player) return;
+
+    if (this.inCave) {
+      if (this.caveExitSprite) {
+        const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.caveExitSprite.x, this.caveExitSprite.y);
+        if (d <= INTERACT_RANGE) {
+          this.#exitCave();
+          return;
+        }
+      }
+      let nearestChest = null;
+      let nearestDist = INTERACT_RANGE;
+      for (const chest of this.caveLootSprites) {
+        if (!chest?.active) continue;
+        const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, chest.x, chest.y);
+        if (d < nearestDist) {
+          nearestChest = chest;
+          nearestDist = d;
+        }
+      }
+      if (nearestChest) {
+        openCaveLootChest(this, nearestChest);
+        return;
+      }
+      return;
+    }
+
+    // En superficie: entrada de cueva cercana antes que un altar.
+    for (const chunk of this.loadedChunks.values()) {
+      for (const sprite of chunk.caveEntranceSprites || []) {
+        if (!sprite?.active) continue;
+        const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, sprite.x, sprite.y);
+        if (d <= INTERACT_RANGE) {
+          this.#enterCave(sprite.caveEntranceData);
+          return;
+        }
+      }
+    }
+
+    this.#tryDestroyNearbyAltar();
+  }
+
+  /** Teletransporta al jugador al interior de la cueva de `entranceData` (parte 14). */
+  #enterCave(entranceData) {
+    if (!entranceData) return;
+    this.inCave = true;
+    this.currentCaveEntranceId = entranceData.id;
+    this.caveReturnPos = { x: this.player.x, y: this.player.y };
+
+    const origin = getCaveRegionOrigin(entranceData.id);
+    const px = origin.x * TILE_SIZE + TILE_SIZE / 2;
+    const py = origin.y * TILE_SIZE + TILE_SIZE / 2;
+    this.player.setPosition(px, py);
+    setForcedDarkness(true);
+    this.#updateStreaming(px, py, true);
+
+    const exitPt = getCaveExitPoint(entranceData.id);
+    this.caveExitSprite = this.add
+      .sprite(exitPt.x * TILE_SIZE + TILE_SIZE / 2, exitPt.y * TILE_SIZE + TILE_SIZE / 2, CAVE_TEX.EXIT)
+      .setDepth(999999);
+    this.caveLootSprites = getCaveLootForRegion(entranceData.id).map((chest) => spawnCaveLootSprite(this, chest));
+
+    EventBus.emit('notify', t('notify.caveEnter'));
+  }
+
+  /** Vuelve a la superficie, al punto exacto donde se entró (parte 14). */
+  #exitCave() {
+    if (!this.caveReturnPos) return;
+    this.inCave = false;
+    this.currentCaveEntranceId = null;
+    setForcedDarkness(false);
+
+    this.player.setPosition(this.caveReturnPos.x, this.caveReturnPos.y);
+    this.#updateStreaming(this.caveReturnPos.x, this.caveReturnPos.y, true);
+
+    this.caveExitSprite?.destroy();
+    this.caveExitSprite = null;
+    this.caveLootSprites.forEach((s) => s?.destroy());
+    this.caveLootSprites = [];
+    this.caveReturnPos = null;
+
+    EventBus.emit('notify', t('notify.caveExit'));
+  }
+
+  /** Busca un altar cargado en memoria a menos de INTERACT_RANGE px del jugador y lo destruye. */
   #tryDestroyNearbyAltar() {
     if (!this.player) return;
     for (const chunk of this.loadedChunks.values()) {
       for (const sprite of chunk.altarSprites) {
         if (!sprite?.active) continue;
         const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, sprite.x, sprite.y);
-        if (dist <= ALTAR_INTERACT_RANGE) {
+        if (dist <= INTERACT_RANGE) {
           destroyAltar(this, sprite);
           return;
         }
@@ -248,13 +409,20 @@ export default class WorldScene extends Phaser.Scene {
     }
   }
 
-  /** Punto aleatorio a 200-450px del jugador, evitando aparecer en el agua. */
+  /** Punto aleatorio a 200-450px del jugador, evitando aparecer en el agua o dentro de una pared de cueva. */
   #randomSpawnPosition() {
     const angle = Math.random() * Math.PI * 2;
     const dist = Phaser.Math.Between(SPAWN_MIN_DIST, SPAWN_MAX_DIST);
     const x = this.player.x + Math.cos(angle) * dist;
     const y = this.player.y + Math.sin(angle) * dist;
-    const tileType = getTileTypeAt(Math.floor(x / TILE_SIZE), Math.floor(y / TILE_SIZE));
+    const tileX = Math.floor(x / TILE_SIZE);
+    const tileY = Math.floor(y / TILE_SIZE);
+
+    if (this.inCave) {
+      if (getCaveTileTypeAt(tileX, tileY) === 'wall') return null;
+      return { x, y };
+    }
+    const tileType = getTileTypeAt(tileX, tileY);
     if (tileType === TILE_TYPES.WATER) return null; // se reintenta en el próximo tick
     return { x, y };
   }
@@ -292,33 +460,96 @@ export default class WorldScene extends Phaser.Scene {
     const key = getChunkKey(cx, cy);
     if (this.loadedChunks.has(key)) return;
 
+    const chunkIsCave = isInsideCave(cx * CHUNK_SIZE, cy * CHUNK_SIZE);
     const tileImages = [];
+    const decorSprites = [];
+
     for (let ty = 0; ty < CHUNK_SIZE; ty++) {
       for (let tx = 0; tx < CHUNK_SIZE; tx++) {
         const worldTileX = cx * CHUNK_SIZE + tx;
         const worldTileY = cy * CHUNK_SIZE + ty;
+        const px = worldTileX * TILE_SIZE + TILE_SIZE / 2;
+        const py = worldTileY * TILE_SIZE + TILE_SIZE / 2;
+
+        if (chunkIsCave) {
+          // Fase 3 (parte 14): interior de cueva — piso decorativo, pared sólida.
+          const caveType = getCaveTileTypeAt(worldTileX, worldTileY);
+          if (caveType === 'wall') {
+            const wallSprite = this.caveWallsGroup.create(px, py, CAVE_TEX.WALL);
+            wallSprite.setDepth(py);
+            wallSprite.refreshBody();
+            tileImages.push(wallSprite);
+          } else {
+            const img = this.add.image(px, py, CAVE_TEX.FLOOR);
+            img.setDepth(-1000);
+            tileImages.push(img);
+          }
+          continue;
+        }
+
         // Fase 2: si estas coordenadas caen dentro de una zona rara ya
         // desbloqueada, "pintamos" la textura especial por encima del
         // terreno normal (ver world/rareZones.js).
         const override = getTileOverrideAt(worldTileX, worldTileY);
         const type = getTileTypeAt(worldTileX, worldTileY);
         const texture = override ?? tileTypeToTexture(type, worldTileX, worldTileY);
-        const img = this.add.image(
-          worldTileX * TILE_SIZE + TILE_SIZE / 2,
-          worldTileY * TILE_SIZE + TILE_SIZE / 2,
-          texture
-        );
+        const img = this.add.image(px, py, texture);
         img.setDepth(-1000); // los tiles siempre van al fondo
         tileImages.push(img);
+
+        // Fase 3 (parte 14): decoración de bioma (árboles/arbustos/flores/rocas).
+        const decor = getDecorationAt(worldTileX, worldTileY);
+        if (decor) {
+          if (decor.solid) {
+            this.decorGroup ??= this.physics.add.staticGroup();
+            const sprite = this.decorGroup.create(px, py, decor.tex);
+            sprite.setDepth(py);
+            sprite.refreshBody();
+            decorSprites.push(sprite);
+          } else {
+            const sprite = this.add.image(px, py, decor.tex);
+            sprite.setDepth(py);
+            decorSprites.push(sprite);
+          }
+        }
       }
     }
 
-    const buildingSprites = loadChunkBuildings(cx, cy).map((data) => spawnExistingBuilding(this, data));
+    let buildingSprites = [];
+    let altarSprites = [];
+    let resourceNodeSprites = [];
+    let caveEntranceSprites = [];
+    const campfireLights = [];
 
-    // Fase 2: altares (0 o 1 por chunk, deterministas — ver world/altars.js).
-    const altarSprites = getAltarsForChunk(cx, cy).map((data) => spawnAltarSprite(this, data));
+    if (!chunkIsCave) {
+      const buildingDataList = loadChunkBuildings(cx, cy);
+      buildingSprites = buildingDataList.map((data) => spawnExistingBuilding(this, data));
+      buildingDataList.forEach((data, i) => {
+        if (data.type === BUILDABLE_TYPES.CAMPFIRE) {
+          campfireLights.push(attachCampfireLight(this, buildingSprites[i]));
+        }
+      });
 
-    this.loadedChunks.set(key, { tileImages, buildingSprites, altarSprites });
+      // Fase 2: altares (0 o 1 por chunk, deterministas — ver world/altars.js).
+      altarSprites = getAltarsForChunk(cx, cy).map((data) => spawnAltarSprite(this, data));
+
+      // Fase 3 (parte 10): nodos de recolección (árboles/rocas/minerales).
+      resourceNodeSprites = getResourceNodesForChunk(cx, cy).map((data) => spawnResourceNodeSprite(this, data));
+
+      // Fase 3 (parte 14): entrada de cueva (0 o 1 por chunk, solo en HILLS).
+      const entranceData = getCaveEntranceForChunk(cx, cy);
+      if (entranceData) caveEntranceSprites = [spawnCaveEntranceSprite(this, entranceData)];
+    }
+
+    this.loadedChunks.set(key, {
+      tileImages,
+      buildingSprites,
+      altarSprites,
+      decorSprites,
+      resourceNodeSprites,
+      caveEntranceSprites,
+      campfireLights
+    });
   }
 
   #unloadChunk(key) {
@@ -327,6 +558,10 @@ export default class WorldScene extends Phaser.Scene {
     chunk.tileImages.forEach((img) => img.destroy());
     chunk.buildingSprites.forEach((sprite) => sprite?.destroy());
     chunk.altarSprites.forEach((sprite) => sprite?.destroy());
+    chunk.decorSprites.forEach((sprite) => sprite?.destroy());
+    chunk.resourceNodeSprites.forEach((sprite) => sprite?.destroy());
+    chunk.caveEntranceSprites.forEach((sprite) => sprite?.destroy());
+    chunk.campfireLights.forEach((light) => light?.destroy());
     this.loadedChunks.delete(key);
   }
 }

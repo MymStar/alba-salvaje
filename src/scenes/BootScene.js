@@ -2,6 +2,14 @@ import Phaser from 'phaser';
 import { TEX } from '../textureKeys.js';
 import { SCENES } from '../sceneKeys.js';
 import { PALETTE, TILE_SIZE } from '../constants.js';
+import { registerGrowthTextures } from '../entities/growthTextures.js';
+import { registerMonsterTextures } from '../entities/monsterTextures.js';
+import { registerGatherTextures } from '../systems/gathering.js';
+import { registerBiomeTextures } from '../world/biomes.js';
+import { registerCaveTextures } from '../world/caves.js';
+import { registerDayNightTextures } from '../world/dayNight.js';
+import { registerCampfireTextures } from '../world/campfire.js';
+import { registerShadingTextures } from '../world/shading.js';
 
 // BootScene genera TODAS las texturas del juego mediante Graphics->generateTexture.
 // No se cargan imágenes externas: esto mantiene el juego ligero (parte del
@@ -58,6 +66,12 @@ export default class BootScene extends Phaser.Scene {
     this.#drawIcon(g, TEX.ICON_BOOTS, 0x5a4a3a);
     this.#drawIcon(g, TEX.ICON_AMULET, 0xd94fae);
 
+    // ---- Fase 3: iconos de herramientas y fogata ----
+    this.#drawIcon(g, TEX.ICON_PICKAXE, 0xb0b6c2);
+    this.#drawIcon(g, TEX.ICON_AXE, 0x9a6a3c);
+    this.#drawIcon(g, TEX.ICON_HAMMER, 0x7a7a7a);
+    this.#drawIcon(g, TEX.BUILD_CAMPFIRE_ICON, 0xff8a3f);
+
     // ---- Fase 2: altares, dioses, cristales ----
     this.#drawAltar(g, TEX.ALTAR);
     this.#drawGod(g, TEX.GOD_SEA, 0x3f8fd6, 0x1f4f8f);
@@ -69,6 +83,18 @@ export default class BootScene extends Phaser.Scene {
     this.#drawFx(g, TEX.FX_FIREBALL, 0xff8a3f);
     this.#drawFx(g, TEX.FX_HEAL, 0x8bd450);
     this.#drawFx(g, TEX.FX_SHIELD, 0x4fc3f7);
+
+    // ---- Fase 3 (2026-08-08): crecimiento por género/nivel, 50+ monstruos,
+    // nodos de recolección. Cada módulo genera sus propias texturas con el
+    // mismo Graphics reusable (ver README de cada uno para el detalle). ----
+    registerGrowthTextures(g);
+    registerMonsterTextures(g);
+    registerGatherTextures(g);
+    registerBiomeTextures(g);
+    registerCaveTextures(g);
+    registerDayNightTextures(g);
+    registerCampfireTextures(g);
+    registerShadingTextures(g);
 
     g.destroy();
 

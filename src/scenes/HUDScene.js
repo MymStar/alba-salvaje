@@ -3,7 +3,7 @@ import { SCENES } from '../sceneKeys.js';
 import { TEX } from '../textureKeys.js';
 import { PALETTE } from '../constants.js';
 import { EventBus } from '../eventBus.js';
-import { GameState, spendCurrency, revivePlayer, resetState, getReviveCost } from '../state.js';
+import { GameState, spendCurrency, revivePlayer, restartCurrentCharacter, getReviveCost } from '../state.js';
 import { setBuildModeActive, isBuildModeActive } from '../buildSelection.js';
 import { createInventoryBar } from '../ui/InventoryUI.js';
 import { openShop } from '../ui/ShopUI.js';
@@ -244,7 +244,7 @@ export default class HUDScene extends Phaser.Scene {
 
     const bg = this.add.rectangle(0, 0, w, h, 0x000000, 0.8).setOrigin(0, 0);
     const panelW = Math.min(380, w - 40);
-    const panelH = 220;
+    const panelH = 250;
     const panelX = w / 2 - panelW / 2;
     const panelY = h / 2 - panelH / 2;
     const panel = this.add.rectangle(panelX, panelY, panelW, panelH, PALETTE.uiBg, 0.98).setOrigin(0, 0);
@@ -262,7 +262,7 @@ export default class HUDScene extends Phaser.Scene {
       fontFamily: 'Segoe UI, sans-serif', fontSize: '12px', color: '#ffcc4d', wordWrap: { width: panelW - 40 }
     }).setOrigin(0.5, 0);
 
-    const reviveBtn = this.add.text(w / 2, panelY + panelH - 60, t('hud.death.revive'), {
+    const reviveBtn = this.add.text(w / 2, panelY + panelH - 90, t('hud.death.revive'), {
       fontFamily: 'Segoe UI, sans-serif',
       fontSize: '16px',
       color: '#14181f',
@@ -270,13 +270,21 @@ export default class HUDScene extends Phaser.Scene {
       padding: { x: 16, y: 8 }
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
-    const resetBtn = this.add.text(w / 2, panelY + panelH - 24, t('hud.death.reset'), {
+    // Fase 3 (parte 1): "empezar de cero" es una opción normal al morir, no
+    // solo un último recurso — reinicia SOLO al personaje activo (los demás
+    // guardados no se tocan, ver state.js#restartCurrentCharacter). Pide una
+    // segunda confirmación (mismo patrón que borrar personaje en el menú)
+    // porque es irreversible.
+    const resetBtn = this.add.text(w / 2, panelY + panelH - 46, t('hud.death.reset'), {
       fontFamily: 'Segoe UI, sans-serif',
-      fontSize: '12px',
+      fontSize: '13px',
       color: '#e8e8e8',
       backgroundColor: '#3a3f4a',
       padding: { x: 10, y: 6 }
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true }).setVisible(false);
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+    let resetConfirmPending = false;
+    let resetConfirmTimer = null;
 
     reviveBtn.on('pointerup', () => {
       const cost = getReviveCost();
@@ -287,12 +295,24 @@ export default class HUDScene extends Phaser.Scene {
         this._deathContainer.setVisible(false);
       } else {
         messageText.setText(t('hud.death.notEnough'));
-        resetBtn.setVisible(true);
       }
     });
 
     resetBtn.on('pointerup', () => {
-      resetState();
+      if (!resetConfirmPending) {
+        resetConfirmPending = true;
+        resetBtn.setText(t('hud.death.restartConfirm')).setColor('#e0473f');
+        if (resetConfirmTimer) clearTimeout(resetConfirmTimer);
+        resetConfirmTimer = setTimeout(() => {
+          resetConfirmPending = false;
+          resetBtn.setText(t('hud.death.reset')).setColor('#e8e8e8');
+        }, 3500);
+        return;
+      }
+      if (resetConfirmTimer) clearTimeout(resetConfirmTimer);
+      resetConfirmPending = false;
+      resetBtn.setText(t('hud.death.reset')).setColor('#e8e8e8');
+      restartCurrentCharacter();
       this._deathContainer.setVisible(false);
       this.scene.stop(SCENES.WORLD);
       this.scene.start(SCENES.WORLD);
@@ -301,14 +321,12 @@ export default class HUDScene extends Phaser.Scene {
     this._deathContainer.add([bg, panel, title, costText, messageText, reviveBtn, resetBtn]);
     this._deathCostText = costText;
     this._deathMessageText = messageText;
-    this._deathResetBtn = resetBtn;
   }
 
   #showDeathModal() {
     const cost = getReviveCost();
     this._deathCostText.setText(t('hud.death.cost', { gold: cost.gold, gems: cost.gems }));
     this._deathMessageText.setText('');
-    this._deathResetBtn.setVisible(false);
     this._deathContainer.setVisible(true);
   }
 }

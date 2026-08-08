@@ -4,17 +4,39 @@
 //
 // IMPORTANTE: 'gold' y 'gems' son monedas VIRTUALES que se ganan jugando.
 // No hay ninguna integración de pago con dinero real en este prototipo (ver src/ui/ShopUI.js).
+//
+// ---- Fase 3 (2026-08-08, parte 1 del pedido): varios personajes independientes ----
+// Antes había UN solo guardado plano (STORAGE_KEYS.SAVE). Ahora hay una lista de
+// "slots" de personaje (STORAGE_KEYS.SLOTS = {ids, activeId}) y cada personaje se
+// guarda aparte bajo STORAGE_KEYS.SLOT_PREFIX + id, con la MISMA forma de datos
+// que el guardado viejo. `GameState` sigue siendo el MISMO objeto singleton que
+// todo el resto del juego importa y muta directamente (Player, WorldScene, UI...);
+// lo que cambia es que ahora se "recarga" con Object.assign cada vez que se activa
+// un personaje distinto (ver selectCharacter). Así ningún otro módulo tuvo que
+// cambiar cómo lee/escribe GameState.
 
 import { EventBus } from './eventBus.js';
-import { STORAGE_KEYS, LEVEL_CAP_NORMAL, LEVEL_CAP_GOD } from './constants.js';
+import { STORAGE_KEYS, LEVEL_CAP_NORMAL, LEVEL_CAP_GOD, GENDER, MAX_CHARACTER_SLOTS } from './constants.js';
 import { getItem } from './itemCatalog.js';
 import { t } from './i18n.js';
 
-function defaultState() {
+function genId() {
+  return `c_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * Estado por defecto de UN personaje nuevo.
+ * `classId` es 'guerrero'|'exploradora'|'mago' (se guarda en character.id por
+ * compatibilidad: Player.js/itemCatalog.js ya comprueban GameState.character.id
+ * para elegir textura/requisitos de clase, y así no tuvieron que cambiar).
+ */
+function defaultCharacterState(slotId, name, gender, classId) {
   return {
     character: {
-      id: 'guerrero',
-      name: 'Guerrero'
+      slotId,
+      id: classId || 'guerrero',
+      name: name || 'Guerrero',
+      gender: gender || GENDER.MALE
     },
     currency: {
       gold: 50,
@@ -43,7 +65,8 @@ function defaultState() {
     equipment: {
       weapon: null,
       armor: null,
-      accessory: null
+      accessory: null,
+      tool: null
     },
     achievements: [],
     ownedItems: [],
@@ -71,49 +94,219 @@ function defaultState() {
   };
 }
 
-export const GameState = load();
+/** Fusiona un guardado parcial (de una versión anterior del juego) con los defaults, por-objeto. */
+function mergeWithDefaults(base, parsed) {
+  return {
+    ...base,
+    ...parsed,
+    character: { ...base.character, ...parsed.character },
+    player: { ...base.player, ...parsed.player },
+    equipment: { ...base.equipment, ...parsed.equipment },
+    world: { ...base.world, ...parsed.world },
+    stats: { ...base.stats, ...parsed.stats },
+    currency: { ...base.currency, ...parsed.currency }
+  };
+}
 
-function load() {
+// ---------- Índice de slots ----------
+
+function loadSlotsIndex() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEYS.SAVE);
+    const raw = localStorage.getItem(STORAGE_KEYS.SLOTS);
     if (raw) {
       const parsed = JSON.parse(raw);
-      const base = defaultState();
-      // Merge por-objeto (no superficial-total): así una partida guardada
-      // ANTES de que existieran campos nuevos (equipo, maná, logros...) los
-      // recibe con su valor por defecto en vez de quedar `undefined` y
-      // romper el juego. Si se agregan más objetos anidados en el futuro,
-      // hay que sumarlos aquí también.
-      return {
-        ...base,
-        ...parsed,
-        player: { ...base.player, ...parsed.player },
-        equipment: { ...base.equipment, ...parsed.equipment },
-        world: { ...base.world, ...parsed.world },
-        stats: { ...base.stats, ...parsed.stats },
-        currency: { ...base.currency, ...parsed.currency }
-      };
+      if (Array.isArray(parsed.ids)) return parsed;
     }
   } catch (e) {
-    console.warn('No se pudo cargar la partida guardada, se usa una nueva.', e);
+    console.warn('No se pudo leer el índice de personajes.', e);
   }
-  return defaultState();
+  return { ids: [], activeId: null };
 }
 
-export function saveState() {
+function saveSlotsIndex(index) {
   try {
-    localStorage.setItem(STORAGE_KEYS.SAVE, JSON.stringify(GameState));
+    localStorage.setItem(STORAGE_KEYS.SLOTS, JSON.stringify(index));
   } catch (e) {
-    console.warn('No se pudo guardar la partida.', e);
+    console.warn('No se pudo guardar el índice de personajes.', e);
   }
 }
 
-export function resetState() {
-  Object.assign(GameState, defaultState());
+function loadCharacterRaw(id) {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.SLOT_PREFIX + id);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e) {
+    console.warn(`No se pudo leer el personaje ${id}.`, e);
+    return null;
+  }
+}
+
+function saveCharacterRaw(id, data) {
+  try {
+    localStorage.setItem(STORAGE_KEYS.SLOT_PREFIX + id, JSON.stringify(data));
+  } catch (e) {
+    console.warn(`No se pudo guardar el personaje ${id}.`, e);
+  }
+}
+
+/**
+ * Migración de partidas viejas (Fase 1/2, guardado único en STORAGE_KEYS.SAVE):
+ * si existe y todavía no hay ningún slot, se convierte en el primer personaje.
+ * Corre una sola vez, la primera vez que se carga el juego tras esta actualización.
+ */
+function migrateLegacySaveIfNeeded(index) {
+  if (index.ids.length > 0) return index;
+  let legacy = null;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.SAVE);
+    if (raw) legacy = JSON.parse(raw);
+  } catch (e) {
+    legacy = null;
+  }
+  if (!legacy) return index;
+
+  const id = genId();
+  const base = defaultCharacterState(id, legacy.character?.name || 'Guerrero', GENDER.MALE, legacy.character?.id);
+  const merged = mergeWithDefaults(base, legacy);
+  merged.character.slotId = id;
+  saveCharacterRaw(id, merged);
+  const next = { ids: [id], activeId: id };
+  saveSlotsIndex(next);
+  return next;
+}
+
+// ---------- Estado activo (singleton compartido por todo el juego) ----------
+
+export const GameState = loadActive();
+
+function loadActive() {
+  let index = migrateLegacySaveIfNeeded(loadSlotsIndex());
+
+  if (index.activeId) {
+    const raw = loadCharacterRaw(index.activeId);
+    if (raw) {
+      const base = defaultCharacterState(index.activeId, raw.character?.name, raw.character?.gender, raw.character?.id);
+      return mergeWithDefaults(base, raw);
+    }
+  }
+
+  // Sin personaje activo (primera vez que se juega, o el activo se borró):
+  // devuelve un estado "vacío" de cortesía; MenuScene detecta esto con
+  // hasActiveCharacter()===false y muestra la pantalla de crear personaje
+  // antes de dejar entrar al mundo.
+  return defaultCharacterState(null, '', GENDER.MALE, 'guerrero');
+}
+
+/** true si hay un personaje activo de verdad (no el placeholder vacío). */
+export function hasActiveCharacter() {
+  return !!GameState.character.slotId;
+}
+
+/** Resumen de todos los personajes guardados, para la pantalla de selección. */
+export function listCharacters() {
+  const index = loadSlotsIndex();
+  return index.ids
+    .map((id) => {
+      const raw = loadCharacterRaw(id);
+      if (!raw) return null;
+      return {
+        id,
+        name: raw.character?.name || '???',
+        gender: raw.character?.gender || GENDER.MALE,
+        classId: raw.character?.id || 'guerrero',
+        level: raw.player?.level || 1,
+        alive: raw.player?.alive !== false
+      };
+    })
+    .filter(Boolean);
+}
+
+export function getMaxCharacterSlots() {
+  return MAX_CHARACTER_SLOTS;
+}
+
+/** Guarda el personaje ACTUALMENTE activo en su propio slot (no toca a los demás). */
+export function saveState() {
+  if (!GameState.character.slotId) return;
+  saveCharacterRaw(GameState.character.slotId, GameState);
+}
+
+/**
+ * Crea un personaje nuevo (parte 2: género + clase) y lo deja guardado, pero
+ * NO lo activa automáticamente — llamar a selectCharacter(id) después si se
+ * quiere jugar con él de inmediato. Devuelve el id nuevo, o null si ya se
+ * llegó al máximo de slots.
+ */
+export function createCharacter(name, gender, classId) {
+  const index = loadSlotsIndex();
+  if (index.ids.length >= MAX_CHARACTER_SLOTS) return null;
+
+  const id = genId();
+  const data = defaultCharacterState(id, name, gender, classId);
+  saveCharacterRaw(id, data);
+  index.ids.push(id);
+  saveSlotsIndex(index);
+  return id;
+}
+
+/**
+ * Activa un personaje: guarda el que estaba activo (si había uno) y carga el
+ * elegido dentro del MISMO objeto GameState (así todo el resto del juego,
+ * que ya tiene una referencia a GameState, ve los datos nuevos sin tener que
+ * reimportar nada). Emite los eventos de refresco de UI relevantes.
+ */
+export function selectCharacter(id) {
+  if (GameState.character.slotId) saveState();
+
+  const raw = loadCharacterRaw(id);
+  if (!raw) return false;
+
+  const base = defaultCharacterState(id, raw.character?.name, raw.character?.gender, raw.character?.id);
+  const merged = mergeWithDefaults(base, raw);
+  Object.assign(GameState, merged);
+
+  const index = loadSlotsIndex();
+  index.activeId = id;
+  if (!index.ids.includes(id)) index.ids.push(id);
+  saveSlotsIndex(index);
+
+  EventBus.emit('character-changed');
+  EventBus.emit('stats-changed');
+  EventBus.emit('currency-changed');
+  EventBus.emit('inventory-changed');
+  EventBus.emit('equipment-changed');
+  return true;
+}
+
+/** Borra un personaje por completo (guardado + su slot). No se puede deshacer. */
+export function deleteCharacter(id) {
+  const index = loadSlotsIndex();
+  index.ids = index.ids.filter((i) => i !== id);
+  if (index.activeId === id) index.activeId = null;
+  saveSlotsIndex(index);
+  try {
+    localStorage.removeItem(STORAGE_KEYS.SLOT_PREFIX + id);
+  } catch (e) {
+    // no-op
+  }
+}
+
+/**
+ * Parte 1 del pedido: al morir, el jugador puede "empezar de cero" — reinicia
+ * SOLO el personaje activo a nivel 1 (conserva su nombre/género/clase/id de
+ * slot, así sigue siendo "el mismo personaje" pero recomienza su progreso).
+ * Los demás personajes guardados no se tocan para nada.
+ */
+export function restartCurrentCharacter() {
+  const { slotId, name, gender, id: classId } = GameState.character;
+  const fresh = defaultCharacterState(slotId, name, gender, classId);
+  Object.assign(GameState, fresh);
   saveState();
   EventBus.emit('stats-changed');
   EventBus.emit('currency-changed');
   EventBus.emit('inventory-changed');
+  EventBus.emit('equipment-changed');
 }
 
 // ---------- Monedas ----------
@@ -179,8 +372,12 @@ export function addXP(amount) {
   while (p.xp >= p.xpToNext && p.level < cap) {
     p.xp -= p.xpToNext;
     p.level += 1;
+    // Fase 3 (parte 7): vida Y maná crecen con el nivel, y se rellenan del
+    // todo cada vez que se sube (antes solo la vida crecía/se rellenaba).
     p.maxHp += 10;
     p.hp = p.maxHp;
+    p.maxMana += 5;
+    p.mana = p.maxMana;
     p.strength += 1;
     p.xpToNext = Math.round(p.xpToNext * 1.12);
     leveled = true;
@@ -286,6 +483,18 @@ export function buyEquipItem(itemId) {
   GameState.ownedItems.push(itemId);
   saveState();
   return equipItem(itemId);
+}
+
+/**
+ * Fase 3 (parte 14): otorga un ítem del catálogo SIN cobrar nada (botín de
+ * cofres de cueva, recompensas de monstruos, etc.). No lo equipa solo.
+ */
+export function grantOwnedItem(itemId) {
+  if (!getItem(itemId)) return false;
+  if (!ownsItem(itemId)) GameState.ownedItems.push(itemId);
+  EventBus.emit('inventory-changed');
+  saveState();
+  return true;
 }
 
 /** Equipa un ítem del catálogo (itemCatalog.js) en su slot, si se cumplen los requisitos. */

@@ -7,7 +7,7 @@
 // `classReq` (opcional) limita el ítem a un personaje concreto.
 // `range` (solo armas) determina el alcance de ataque del jugador.
 
-import { EQUIP_SLOTS, ITEM_RARITY, WEAPON_RANGE } from './constants.js';
+import { EQUIP_SLOTS, ITEM_RARITY, WEAPON_RANGE, TOOL_TYPES } from './constants.js';
 import { TEX } from './textureKeys.js';
 
 export const ITEMS = [
@@ -131,6 +131,62 @@ export const ITEMS = [
     price: { gold: 1000, gems: 1000 },
     levelReq: 500,
     bonuses: { strength: 10, defense: 10, speed: 0.3 }
+  },
+
+  // ---- Fase 3 (parte 10 del pedido): herramientas para recolectar recursos
+  // (pico/hacha/martillo) y romper estructuras. Sin bono de stats: son
+  // utilitarias, no ofensivas — ver systems/gathering.js. `toolType` es el
+  // campo que gathering.js lee para saber si la herramienta equipada sirve
+  // para el nodo que se está golpeando.
+  {
+    id: 'pickaxe_basic',
+    slot: EQUIP_SLOTS.TOOL,
+    nameKey: 'item.pickaxe_basic',
+    tex: TEX.ICON_PICKAXE,
+    rarity: ITEM_RARITY.BASIC,
+    price: { gold: 25 },
+    levelReq: 1,
+    toolType: TOOL_TYPES.PICKAXE
+  },
+  {
+    id: 'axe_basic',
+    slot: EQUIP_SLOTS.TOOL,
+    nameKey: 'item.axe_basic',
+    tex: TEX.ICON_AXE,
+    rarity: ITEM_RARITY.BASIC,
+    price: { gold: 25 },
+    levelReq: 1,
+    toolType: TOOL_TYPES.AXE
+  },
+  {
+    id: 'hammer_basic',
+    slot: EQUIP_SLOTS.TOOL,
+    nameKey: 'item.hammer_basic',
+    tex: TEX.ICON_HAMMER,
+    rarity: ITEM_RARITY.BASIC,
+    price: { gold: 30 },
+    levelReq: 1,
+    toolType: TOOL_TYPES.HAMMER
+  },
+  {
+    id: 'pickaxe_iron',
+    slot: EQUIP_SLOTS.TOOL,
+    nameKey: 'item.pickaxe_iron',
+    tex: TEX.ICON_PICKAXE,
+    rarity: ITEM_RARITY.INTERMEDIATE,
+    price: { gold: 180 },
+    levelReq: 8,
+    toolType: TOOL_TYPES.PICKAXE
+  },
+  {
+    id: 'axe_iron',
+    slot: EQUIP_SLOTS.TOOL,
+    nameKey: 'item.axe_iron',
+    tex: TEX.ICON_AXE,
+    rarity: ITEM_RARITY.INTERMEDIATE,
+    price: { gold: 180 },
+    levelReq: 8,
+    toolType: TOOL_TYPES.AXE
   }
 ];
 

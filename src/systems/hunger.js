@@ -1,6 +1,6 @@
 // Sistema de supervivencia: ticker de hambre/energía y consumo de comida.
 
-import { changeHunger, changeEnergy, damagePlayer, GameState, hasItem, removeItem, addXP } from '../state.js';
+import { changeHunger, changeEnergy, changeMana, damagePlayer, GameState, hasItem, removeItem, addXP } from '../state.js';
 import { EventBus } from '../eventBus.js';
 import { t } from '../i18n.js';
 import { playSound } from './sound.js';
@@ -10,6 +10,7 @@ const HUNGER_DRAIN = 2;
 const ENERGY_DRAIN_NORMAL = 1;
 const ENERGY_DRAIN_SIN_HAMBRE = 3;
 const DAMAGE_POR_INANICION = 2;
+const MANA_REGEN_PER_TICK = 1;
 
 /**
  * Arranca el "reloj" de supervivencia de la escena: baja hambre/energía
@@ -31,6 +32,11 @@ export function startSurvivalTicker(scene) {
       if (GameState.player.hunger <= 0) {
         damagePlayer(DAMAGE_POR_INANICION);
       }
+      // Fase 3 (parte 6): el maná NUNCA se agota solo — solo baja cuando el
+      // jugador lanza un hechizo (ver changeMana en systems/magic.js). Aquí
+      // además se regenera solo un poco mientras no se usa, como en la
+      // mayoría de juegos con maná.
+      if (GameState.player.alive) changeMana(MANA_REGEN_PER_TICK);
     }
   });
 }

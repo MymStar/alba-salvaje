@@ -7,10 +7,13 @@ import { PLAYER_SPEED } from '../constants.js';
 import { GameState } from '../state.js';
 import { dealDamageToEnemy, calcPlayerDamage } from '../systems/combat.js';
 import { playSound } from '../systems/sound.js';
+import { attachWeaponController } from './weaponVisual.js';
+import { getGrowthTextureKey } from './growthTextures.js';
+import { EventBus } from '../eventBus.js';
 
 const ATTACK_COOLDOWN_MS = 400;
-const ATTACK_RANGE = 30;
 
+/** Textura de respaldo si por lo que sea no hay etapa de crecimiento válida (parte 8). */
 function texturaSegunPersonaje() {
   const id = GameState.character?.id;
   if (id === 'exploradora') return TEX.PLAYER_EXPLORADORA;
@@ -18,9 +21,17 @@ function texturaSegunPersonaje() {
   return TEX.PLAYER_GUERRERO;
 }
 
+/** Textura real del jugador: varía por clase, género y nivel (bebé -> adulto, parte 8). */
+function textureForCurrentPlayer() {
+  const id = GameState.character?.id || 'guerrero';
+  const gender = GameState.character?.gender;
+  const level = GameState.player?.level || 1;
+  return getGrowthTextureKey(id, gender, level) || texturaSegunPersonaje();
+}
+
 export default class Player extends Phaser.Physics.Arcade.Sprite {
   constructor(scene, x, y) {
-    super(scene, x, y, texturaSegunPersonaje());
+    super(scene, x, y, textureForCurrentPlayer());
 
     scene.add.existing(this);
     scene.physics.add.existing(this);
@@ -30,6 +41,19 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
     this.setCollideWorldBounds(false);
 
     this.lastAttack = 0;
+
+    // Fase 3 (parte 4): arma equipada visible sobre el personaje, que se
+    // anima al atacar y da el alcance real según el tipo de arma.
+    this.weaponController = attachWeaponController(scene, this);
+
+    // Fase 3 (parte 8): al subir de nivel, cambia la textura del cuerpo a
+    // la etapa de crecimiento que corresponda (bebé/niño/joven/adulto).
+    this._onLevelUp = () => this.setTexture(textureForCurrentPlayer());
+    EventBus.on('levelup', this._onLevelUp);
+    scene.events.once('shutdown', () => {
+      EventBus.off('levelup', this._onLevelUp);
+      this.weaponController?.destroy();
+    });
 
     // Controles propios: flechas + WASD, para no depender de que quien nos
     // instancie configure cursors correctamente.
@@ -45,6 +69,8 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
    * @param {number} delta
    */
   update(cursors, delta) {
+    this.weaponController?.update();
+
     if (!GameState.player.alive) {
       this.setVelocity(0, 0);
       return;
@@ -96,16 +122,19 @@ export default class Player extends Phaser.Physics.Arcade.Sprite {
         onComplete: () => this.clearTint()
       });
     }
+    // Fase 3 (parte 4): el arma equipada se anima (tajo) en sincronía con el golpe.
+    this.weaponController?.playSwing();
 
     const dano = calcPlayerDamage();
-    const grupos = [this.scene?.plantsGroup, this.scene?.zombiesGroup, this.scene?.bossGroup, this.scene?.guardiansGroup];
+    const alcance = this.weaponController?.getRangePx() ?? 34;
+    const grupos = [this.scene?.monstersGroup, this.scene?.bossGroup, this.scene?.guardiansGroup];
 
     for (const grupo of grupos) {
       if (!grupo) continue;
       grupo.getChildren().slice().forEach((enemy) => {
         if (!enemy.active) return;
         const dist = Phaser.Math.Distance.Between(this.x, this.y, enemy.x, enemy.y);
-        if (dist <= ATTACK_RANGE) {
+        if (dist <= alcance) {
           dealDamageToEnemy(enemy, dano);
         }
       });

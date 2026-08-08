@@ -8,6 +8,7 @@ import { EventBus } from '../eventBus.js';
 import { hasItem, removeItem } from '../state.js';
 import { t } from '../i18n.js';
 import { playSound } from '../systems/sound.js';
+import { CAMPFIRE_TEX } from './campfire.js';
 
 /** Clave de texto única para un chunk, usada como sufijo de localStorage y como id en memoria. */
 export function getChunkKey(cx, cy) {
@@ -21,14 +22,21 @@ const BUILD_COSTS = {
     { type: RESOURCE_TYPES.WOOD, qty: 2 },
     { type: RESOURCE_TYPES.FIBER, qty: 1 }
   ],
-  [BUILDABLE_TYPES.DOOR]: [{ type: RESOURCE_TYPES.WOOD, qty: 2 }]
+  [BUILDABLE_TYPES.DOOR]: [{ type: RESOURCE_TYPES.WOOD, qty: 2 }],
+  // Fase 3 (parte 13): fogata, para ver de noche/en cuevas.
+  [BUILDABLE_TYPES.CAMPFIRE]: [
+    { type: RESOURCE_TYPES.WOOD, qty: 4 },
+    { type: RESOURCE_TYPES.STONE, qty: 1 }
+  ]
 };
 
-// Textura a usar por cada tipo de construcción.
+// Textura a usar por cada tipo de construcción. WorldScene le agrega el
+// efecto de luz por encima a la fogata (ver world/campfire.js#attachCampfireLight).
 const BUILD_TEXTURES = {
   [BUILDABLE_TYPES.WALL_WOOD]: TEX.BUILD_WALL_WOOD,
   [BUILDABLE_TYPES.FARM_PLOT]: TEX.BUILD_FARM_PLOT,
-  [BUILDABLE_TYPES.DOOR]: TEX.BUILD_DOOR
+  [BUILDABLE_TYPES.DOOR]: TEX.BUILD_DOOR,
+  [BUILDABLE_TYPES.CAMPFIRE]: CAMPFIRE_TEX
 };
 
 /** Lee del localStorage las construcciones guardadas de un chunk. [] si no hay nada. */

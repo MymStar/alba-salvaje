@@ -5,8 +5,12 @@ export const TILE_SIZE = 32;
 export const CHUNK_SIZE = 16; // tiles por lado de cada "chunk" del mundo
 export const RENDER_CHUNK_RADIUS = 2; // cuántos chunks alrededor del jugador se mantienen cargados
 
-export const DAY_LENGTH_MS = 3 * 60 * 1000; // 3 min de día
-export const NIGHT_LENGTH_MS = 2 * 60 * 1000; // 2 min de noche
+// Fase 3 (parte 12 del pedido del usuario, 2026-08-08): día y noche duran
+// 10 minutos cada uno.
+export const DAY_LENGTH_MS = 10 * 60 * 1000;
+export const NIGHT_LENGTH_MS = 10 * 60 * 1000;
+// Cuántas fases lunares distintas se ven de noche (como en Terraria), en ciclo.
+export const MOON_PHASES = 8;
 
 export const PLAYER_SPEED = 160;
 
@@ -24,13 +28,15 @@ export const RESOURCE_TYPES = {
   FIBER: 'fiber',
   FOOD_FRUIT: 'food_fruit',
   FOOD_MEAT: 'food_meat',
-  CRYSTAL: 'crystal'
+  CRYSTAL: 'crystal',
+  ORE: 'ore' // Fase 3 (parte 10): minerales recogidos con pico en rocas/cuevas
 };
 
 export const BUILDABLE_TYPES = {
   WALL_WOOD: 'wall_wood',
   FARM_PLOT: 'farm_plot',
-  DOOR: 'door'
+  DOOR: 'door',
+  CAMPFIRE: 'campfire' // Fase 3 (parte 13): ilumina de noche/cuevas
 };
 
 export const CURRENCY = {
@@ -43,7 +49,15 @@ export const CURRENCY = {
 export const EQUIP_SLOTS = {
   WEAPON: 'weapon',
   ARMOR: 'armor',
-  ACCESSORY: 'accessory'
+  ACCESSORY: 'accessory',
+  TOOL: 'tool' // Fase 3: pico/hacha/martillo (ver TOOL_TYPES)
+};
+
+// Fase 3: herramientas para recolectar recursos golpeando árboles/rocas/minerales.
+export const TOOL_TYPES = {
+  PICKAXE: 'pickaxe', // roca/minerales
+  AXE: 'axe', // árboles/madera
+  HAMMER: 'hammer' // demoler estructuras propias
 };
 
 export const ITEM_RARITY = {
@@ -56,6 +70,15 @@ export const WEAPON_RANGE = {
   SHORT: 'short',
   MEDIUM: 'medium',
   LONG: 'long'
+};
+
+// Fase 3 (parte 4 del pedido): alcance real en píxeles según el tipo de
+// arma equipada, usado tanto por el ataque del jugador como por el sprite
+// del arma visible/animada (ver entities/weaponVisual.js).
+export const WEAPON_RANGE_PX = {
+  [WEAPON_RANGE.SHORT]: 34,
+  [WEAPON_RANGE.MEDIUM]: 72,
+  [WEAPON_RANGE.LONG]: 130
 };
 
 // Los 4 dioses malvados del documento de diseño (partes 169-235).
@@ -93,8 +116,69 @@ export const PALETTE = {
 };
 
 export const STORAGE_KEYS = {
-  SAVE: 'alba_salvaje_save_v1',
-  WORLD_PREFIX: 'alba_salvaje_chunk_'
+  SAVE: 'alba_salvaje_save_v1', // ya no se usa directo (ver STORAGE_KEYS.SLOTS), se conserva por migración
+  WORLD_PREFIX: 'alba_salvaje_chunk_',
+  // Fase 3 (parte 1 del pedido): varios personajes independientes. `SLOTS`
+  // guarda el índice { ids:[...], activeId }, y cada personaje se guarda
+  // aparte bajo `SLOT_PREFIX + id` (mismo shape que el guardado viejo).
+  SLOTS: 'alba_salvaje_slots_v1',
+  SLOT_PREFIX: 'alba_salvaje_char_'
 };
 
 export const GAME_TITLE = 'Alba Salvaje';
+
+// ---- Fase 3 (2026-08-08): personajes, crecimiento, mundo vivo ----
+// Ver pron de juego.rtf y la conversación del 2026-08-08 para el pedido
+// completo (14 puntos). Todo lo de aquí abajo es contrato compartido para
+// los módulos nuevos de world/entities/systems.
+
+export const GENDER = {
+  MALE: 'male',
+  FEMALE: 'female'
+};
+
+export const MAX_CHARACTER_SLOTS = 6;
+
+// Etapas visuales del personaje (parte 8): empieza "bebé" (sin brazos/piernas
+// visibles) y va ganando extremidades hasta volverse adulto. El nivel exacto
+// de corte está en GROWTH_LEVEL_THRESHOLDS (recorrer de mayor a menor nivel).
+export const GROWTH_STAGES = {
+  BABY: 'baby',
+  CHILD: 'child',
+  TEEN: 'teen',
+  ADULT: 'adult'
+};
+
+export const GROWTH_LEVEL_THRESHOLDS = [
+  { stage: GROWTH_STAGES.ADULT, minLevel: 50 },
+  { stage: GROWTH_STAGES.TEEN, minLevel: 25 },
+  { stage: GROWTH_STAGES.CHILD, minLevel: 10 },
+  { stage: GROWTH_STAGES.BABY, minLevel: 1 }
+];
+
+/** Etapa visual que corresponde a un nivel dado (parte 8). */
+export function getGrowthStageForLevel(level) {
+  const found = GROWTH_LEVEL_THRESHOLDS.find((t) => level >= t.minLevel);
+  return found ? found.stage : GROWTH_STAGES.BABY;
+}
+
+// Biomas del mundo (parte 14): capa determinista de MUY baja frecuencia,
+// independiente del terreno tile-a-tile de world/terrain.js. Decide
+// decoración (árboles/arbustos/flores), densidad de monstruos y dónde
+// pueden aparecer entradas de cueva.
+export const BIOME_TYPES = {
+  PLAINS: 'plains',
+  FOREST: 'forest',
+  DESERT: 'desert',
+  HILLS: 'hills',
+  FLOWER_FIELD: 'flower_field',
+  BUSHLAND: 'bushland',
+  CAVE: 'cave' // interior de cueva (ver world/caves.js)
+};
+
+// Fase 3 (parte 14): el interior de las cuevas se genera en una región del
+// mundo MUY alejada de la superficie (mismo sistema de chunks/streaming,
+// reutilizado), para no tener que mantener una escena separada. Cada
+// entrada de cueva en superficie tiene asignada una región única empezando
+// en (CAVE_WORLD_OFFSET + hash, CAVE_WORLD_OFFSET + hash) en tiles.
+export const CAVE_WORLD_OFFSET = 2_000_000;

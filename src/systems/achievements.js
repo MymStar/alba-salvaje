@@ -49,13 +49,18 @@ export function wireAchievements() {
     }
   });
 
+  // Fase 3: Monster.js emite la FAMILIA del catálogo (entities/monsterCatalog.js),
+  // no solo 'zombie'/'plant' — 'undead' cuenta como zombi para este logro
+  // viejo, y cualquier otra familia hostil también suma "zombiesKilled" como
+  // contador general de monstruos derrotados (mantiene el logro alcanzable
+  // con el catálogo de 50+ tipos nuevo).
   EventBus.on('enemy-killed', (kind) => {
-    if (kind === 'zombie') {
-      const n = bumpStat('zombiesKilled');
-      if (n >= 50) unlock('kill50zombies');
-    } else if (kind === 'plant') {
+    if (kind === 'plant') {
       const n = bumpStat('plantsKilled');
       if (n >= 20) unlock('kill20plants');
+    } else {
+      const n = bumpStat('zombiesKilled');
+      if (n >= 50) unlock('kill50zombies');
     }
   });
 

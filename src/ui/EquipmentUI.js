@@ -13,10 +13,11 @@ import { playSound } from '../systems/sound.js';
 const SLOT_LABEL_KEY = {
   [EQUIP_SLOTS.WEAPON]: 'equip.weapon',
   [EQUIP_SLOTS.ARMOR]: 'equip.armor',
-  [EQUIP_SLOTS.ACCESSORY]: 'equip.accessory'
+  [EQUIP_SLOTS.ACCESSORY]: 'equip.accessory',
+  [EQUIP_SLOTS.TOOL]: 'equip.tool' // Fase 3 (parte 10): pico/hacha/martillo
 };
 
-const SLOT_ORDER = [EQUIP_SLOTS.WEAPON, EQUIP_SLOTS.ARMOR, EQUIP_SLOTS.ACCESSORY];
+const SLOT_ORDER = [EQUIP_SLOTS.WEAPON, EQUIP_SLOTS.ARMOR, EQUIP_SLOTS.ACCESSORY, EQUIP_SLOTS.TOOL];
 
 /**
  * Abre el panel de equipo sobre el HUD.

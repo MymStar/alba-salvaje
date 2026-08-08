@@ -9,6 +9,9 @@ import { dealDamageToEnemy, calcPlayerDamage } from './combat.js';
 import { EventBus } from '../eventBus.js';
 import { t } from '../i18n.js';
 import { playSound } from './sound.js';
+import { destroyAltar } from '../world/altars.js';
+
+const ALTAR_SPELL_RANGE = 90; // parte 6: la magia también puede destruir altares, no solo la tecla E
 
 export const SPELLS = [
   { id: 'fireball', nameKey: 'spell.fireball', manaCost: 15, levelReq: 5, tex: TEX.FX_FIREBALL },
@@ -79,7 +82,7 @@ export function castSpell(scene, spellId, player) {
 
 /** Busca el enemigo activo más cercano dentro de `range` px del jugador. */
 function findNearestEnemy(scene, player, range) {
-  const groups = [scene.plantsGroup, scene.zombiesGroup, scene.bossGroup, scene.guardiansGroup];
+  const groups = [scene.monstersGroup, scene.bossGroup, scene.guardiansGroup];
   let nearest = null;
   let nearestDist = range;
   for (const group of groups) {
@@ -96,11 +99,39 @@ function findNearestEnemy(scene, player, range) {
   return nearest;
 }
 
+/**
+ * Parte 6 del pedido: los altares también se pueden destruir con magia (no
+ * solo con la tecla E cuerpo a cuerpo). Busca el altar cargado en memoria
+ * más cercano al jugador dentro de `range` px, en scene.loadedChunks (mismo
+ * dato que usa WorldScene#tryDestroyNearbyAltar).
+ */
+function findNearestAltarSprite(scene, player, range) {
+  if (!scene.loadedChunks) return null;
+  let nearest = null;
+  let nearestDist = range;
+  for (const chunk of scene.loadedChunks.values()) {
+    for (const sprite of chunk.altarSprites || []) {
+      if (!sprite?.active) continue;
+      const d = Phaser.Math.Distance.Between(player.x, player.y, sprite.x, sprite.y);
+      if (d < nearestDist) {
+        nearest = sprite;
+        nearestDist = d;
+      }
+    }
+  }
+  return nearest;
+}
+
 function castFireball(scene, player) {
   const target = findNearestEnemy(scene, player, 260);
   const fx = scene.add.image(player.x, player.y, TEX.FX_FIREBALL).setDepth(20);
+
+  const nearbyAltar = findNearestAltarSprite(scene, player, ALTAR_SPELL_RANGE);
+  if (nearbyAltar) destroyAltar(scene, nearbyAltar);
+
   if (!target) {
-    // Sin objetivo: igual se ve el destello, pero no hace daño.
+    // Sin objetivo de combate: igual se ve el destello (y ya destruyó el
+    // altar cercano si había uno), pero no hace daño a nadie.
     scene.tweens.add({ targets: fx, alpha: 0, scale: 1.6, duration: 300, onComplete: () => fx.destroy() });
     return;
   }
